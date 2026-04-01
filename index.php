@@ -607,7 +607,7 @@
     <!-- Platform Features -->
     <div class="platform-container">
         <div class="platform-image">
-            <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80" alt="Telemedicine Platform">
+            <img src="images/doctor2.jpg" alt="Telemedicine Platform">
         </div>
         <div class="platform-text-block">
             <h2>Why Choose TeleMed Connect?</h2>

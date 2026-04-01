@@ -159,7 +159,7 @@ session_start();
 
         /* Page Header */
         .page-header {
-            background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80');
+            background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('images/6.jpg');
             background-repeat: no-repeat;
             background-size: cover;
             background-position: center;
@@ -522,8 +522,7 @@ session_start();
 
     <header class="header" id="header">
         <div class="logo">
-            <img src="images/logo.jpeg" alt="TeleMed Logo" onerror="this.src='https://via.placeholder.com/50x50?text=TM'">
-            <span>TeleMed Cameroon</span>
+            <img src="images/logo 3.5.jpeg" alt="TeleMed Logo">
         </div>
 
         <button class="menu-toggle" id="menuToggle">
@@ -585,7 +584,7 @@ session_start();
 
     <section class="benefits-section">
         <div class="benefits-container">
-            <h2>Why Choose TeleMed Cameroon?</h2>
+            <h2>Why Choose TeleMed Connect?</h2>
             <p>Experience healthcare reimagined with our innovative platform</p>
             <div class="benefits-grid">
                 <div class="benefit-card">
@@ -625,7 +624,7 @@ session_start();
         <div class="faq-grid">
             <div class="faq-item">
                 <div class="faq-question">
-                    <span>Is TeleMed Cameroon available nationwide?</span>
+                    <span>Is TeleMed Connect available nationwide?</span>
                     <i class="fas fa-chevron-down"></i>
                 </div>
                 <div class="faq-answer">
@@ -659,7 +658,7 @@ session_start();
                     You can request a prescription refill during a follow-up consultation. Your doctor will review your case and provide an updated prescription if appropriate. All prescriptions are available for download in your medical records.
                 </div>
             </div>
-            <div class="faq-item">
+            <!-- <div class="faq-item">
                 <div class="faq-question">
                     <span>How do I pay for consultations?</span>
                     <i class="fas fa-chevron-down"></i>
@@ -667,7 +666,7 @@ session_start();
                 <div class="faq-answer">
                     We accept multiple payment methods including mobile money (MTN Mobile Money, Orange Money), credit/debit cards, and bank transfers. All payments are processed securely through our platform.
                 </div>
-            </div>
+            </div> -->
             <div class="faq-item">
                 <div class="faq-question">
                     <span>Can I get a refund if I cancel my appointment?</span>
@@ -686,7 +685,7 @@ session_start();
     </section>
 
     <footer>
-        <p>&copy; 2025 TeleMed Cameroon. All Rights Reserved</p>
+        <p>&copy; 2026 TeleMed Connect. All Rights Reserved</p>
     </footer>
 
     <script>
