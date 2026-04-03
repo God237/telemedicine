@@ -14,23 +14,75 @@ require_once dirname(__DIR__) . '/config.php';
 $patient_id = $_SESSION['user_id'];
 $patient_name = $_SESSION['name'];
 
-// Fetch doctors from database
-$doctors_sql = "SELECT * FROM users WHERE role = 'doctor' AND (status = 'approved' OR status IS NULL)";
+// Define Douala area coordinates mapping
+$area_coordinates = [
+    'Akwa' => ['lat' => 4.0469, 'lng' => 9.7043],
+    'Bonanjo' => ['lat' => 4.0500, 'lng' => 9.7042],
+    'Bonaberi' => ['lat' => 4.0833, 'lng' => 9.6833],
+    'Bonamoussadi' => ['lat' => 4.0833, 'lng' => 9.7167],
+    'New Bell' => ['lat' => 4.0417, 'lng' => 9.6958],
+    'Deido' => ['lat' => 4.0458, 'lng' => 9.6896],
+    'Makepe' => ['lat' => 4.0708, 'lng' => 9.6833],
+    'Tsinga' => ['lat' => 4.0542, 'lng' => 9.7125],
+    'Damas' => ['lat' => 4.0479, 'lng' => 9.7083],
+    'Logbessou' => ['lat' => 4.0972, 'lng' => 9.7167]
+];
+
+// Fetch patient's saved location from database
+$patient_sql = "SELECT city, area, latitude, longitude FROM users WHERE id = ?";
+$patient_stmt = $conn->prepare($patient_sql);
+$patient_stmt->bind_param("i", $patient_id);
+$patient_stmt->execute();
+$patient_data = $patient_stmt->get_result()->fetch_assoc();
+
+// Set patient location - use area coordinates if available
+$patient_city = 'Douala';
+$patient_area = $patient_data['area'] ?? 'Akwa';
+
+// Get patient coordinates from area
+if (isset($area_coordinates[$patient_area])) {
+    $patient_lat = $area_coordinates[$patient_area]['lat'];
+    $patient_lng = $area_coordinates[$patient_area]['lng'];
+} else {
+    $patient_lat = 4.0500;
+    $patient_lng = 9.7000;
+}
+
+// Fetch ALL approved doctors from database (not just those with coordinates)
+$doctors_sql = "SELECT id, name, email, phone, specialty, location as city, area, 
+                latitude, longitude, experience, consultation_fee, status 
+                FROM users 
+                WHERE role = 'doctor' AND status = 'approved'";
 $doctors_result = $conn->query($doctors_sql);
 $doctors = [];
 
 if ($doctors_result && $doctors_result->num_rows > 0) {
     while($doctor = $doctors_result->fetch_assoc()) {
+        // Get coordinates - use doctor's saved coordinates or derive from area
+        $doc_lat = $doctor['latitude'];
+        $doc_lng = $doctor['longitude'];
+        
+        // If doctor has no coordinates but has an area, use area coordinates
+        if (empty($doc_lat) && !empty($doctor['area']) && isset($area_coordinates[$doctor['area']])) {
+            $doc_lat = $area_coordinates[$doctor['area']]['lat'];
+            $doc_lng = $area_coordinates[$doctor['area']]['lng'];
+        }
+        
+        // If still no coordinates, skip this doctor (can't show on map)
+        if (empty($doc_lat) || empty($doc_lng)) {
+            continue;
+        }
+        
         $doctors[] = [
             'id' => $doctor['id'],
             'name' => $doctor['name'],
             'specialty' => $doctor['specialty'] ?? 'General Practitioner',
-            'city' => $doctor['location'] ?? 'Yaoundé',
-            'area' => $doctor['area'] ?? 'Central',
+            'city' => 'Douala',
+            'area' => $doctor['area'] ?? 'Unknown',
             'available' => true,
             'ratings' => 4.5,
-            'lat' => $doctor['latitude'] ?? null,
-            'lng' => $doctor['longitude'] ?? null,
+            'lat' => floatval($doc_lat),
+            'lng' => floatval($doc_lng),
             'phone' => $doctor['phone'] ?? '',
             'email' => $doctor['email'],
             'experience' => $doctor['experience'] ?? '5+ years',
@@ -39,17 +91,10 @@ if ($doctors_result && $doctors_result->num_rows > 0) {
     }
 }
 
-// If no doctors in database, use default Cameroon doctors
+// If no approved doctors in database, show message
 if (empty($doctors)) {
-    $doctors = [
-        ['id' => 1, 'name' => 'Dr. Marie Ndomo', 'specialty' => 'Cardiologist', 'city' => 'Yaoundé', 'area' => 'Bastos', 'available' => true, 'ratings' => 4.8, 'lat' => 3.8667, 'lng' => 11.5167, 'phone' => '655123456', 'email' => 'marie.ndomo@telemed.cm', 'experience' => '12 years', 'consultation_fee' => 8000],
-        ['id' => 2, 'name' => 'Dr. Paul Tchamba', 'specialty' => 'Dermatologist', 'city' => 'Douala', 'area' => 'Bonanjo', 'available' => false, 'ratings' => 4.3, 'lat' => 4.0500, 'lng' => 9.7000, 'phone' => '677789123', 'email' => 'paul.tchamba@telemed.cm', 'experience' => '8 years', 'consultation_fee' => 6000],
-        ['id' => 3, 'name' => 'Dr. Amina Moussa', 'specialty' => 'Gynecologist', 'city' => 'Yaoundé', 'area' => 'Mvog-Mbi', 'available' => true, 'ratings' => 4.9, 'lat' => 3.8725, 'lng' => 11.5185, 'phone' => '699456789', 'email' => 'amina.moussa@telemed.cm', 'experience' => '15 years', 'consultation_fee' => 10000],
-        ['id' => 4, 'name' => 'Dr. Jean-Pierre Kengne', 'specialty' => 'Pediatrician', 'city' => 'Douala', 'area' => 'Akwa', 'available' => true, 'ratings' => 4.6, 'lat' => 4.0469, 'lng' => 9.7043, 'phone' => '670112233', 'email' => 'jean.kengne@telemed.cm', 'experience' => '10 years', 'consultation_fee' => 7000],
-        ['id' => 5, 'name' => 'Dr. Christine Njiké', 'specialty' => 'General Practitioner', 'city' => 'Bafoussam', 'area' => 'Toungou', 'available' => true, 'ratings' => 4.5, 'lat' => 5.4778, 'lng' => 10.4178, 'phone' => '694556677', 'email' => 'christine.njike@telemed.cm', 'experience' => '7 years', 'consultation_fee' => 5000],
-        ['id' => 6, 'name' => 'Dr. Alioum Bakary', 'specialty' => 'Neurologist', 'city' => 'Garoua', 'area' => 'Roumdé', 'available' => true, 'ratings' => 4.7, 'lat' => 9.3014, 'lng' => 13.3900, 'phone' => '655998877', 'email' => 'alioum.bakary@telemed.cm', 'experience' => '20 years', 'consultation_fee' => 12000],
-        ['id' => 7, 'name' => 'Dr. Esther Fonyuy', 'specialty' => 'Dentist', 'city' => 'Bamenda', 'area' => 'Nkwen', 'available' => true, 'ratings' => 4.4, 'lat' => 5.9597, 'lng' => 10.1456, 'phone' => '677443322', 'email' => 'esther.fonyuy@telemed.cm', 'experience' => '6 years', 'consultation_fee' => 6000]
-    ];
+    // You can keep default doctors for testing or show empty state
+    $doctors = [];
 }
 
 // Store doctors in session for offline access
@@ -78,14 +123,12 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             overflow-x: hidden;
         }
 
-        /* Dashboard Layout */
         .dashboard {
             display: flex;
             min-height: 100vh;
             position: relative;
         }
 
-        /* Sidebar Styles */
         .sidebar {
             width: 280px;
             height: 100vh;
@@ -114,7 +157,6 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             bottom: 0;
             background: rgba(0,0,0,0.5);
             z-index: 999;
-            transition: all 0.3s ease;
         }
 
         .sidebar-overlay.active {
@@ -141,7 +183,6 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
 
         .nav-links {
             list-style: none;
-            padding: 0;
         }
 
         .nav-links li {
@@ -159,11 +200,6 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
         .nav-links li i {
             font-size: 18px;
             width: 24px;
-            transition: all 0.3s ease;
-        }
-
-        .nav-links li span {
-            font-size: 0.95rem;
         }
 
         .nav-links li:hover {
@@ -175,10 +211,8 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
         .nav-links li.active {
             background: #2b7a8a;
             color: white;
-            box-shadow: 0 4px 12px rgba(43,122,138,0.3);
         }
 
-        /* Mobile Menu Toggle */
         .menu-toggle {
             display: none;
             position: fixed;
@@ -194,46 +228,31 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             cursor: pointer;
             font-size: 1.2rem;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            transition: all 0.3s ease;
         }
 
-        .menu-toggle:hover {
-            background: #1f5c6e;
-            transform: scale(1.05);
-        }
-
-        /* Main Content */
         .main-content {
             flex: 1;
             margin-left: 280px;
             padding: 30px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            width: calc(100% - 280px);
+            transition: all 0.3s;
         }
 
-        .main-content.expanded {
-            margin-left: 0;
-            width: 100%;
-        }
-
-        /* Page Header */
         .page-header {
             background: white;
             padding: 20px 30px;
             border-radius: 16px;
             margin-bottom: 30px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
 
         .page-header h1 {
             font-size: 1.8rem;
             color: #1a3a4a;
-            margin-bottom: 5px;
         }
 
         .page-header p {
@@ -249,7 +268,6 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             font-weight: 500;
         }
 
-        /* Search Section */
         .search-section {
             background: white;
             padding: 20px;
@@ -271,13 +289,6 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             border-radius: 10px;
             font-size: 0.95rem;
             outline: none;
-            transition: all 0.3s;
-        }
-
-        .search-section input:focus,
-        .search-section select:focus {
-            border-color: #2b7a8a;
-            box-shadow: 0 0 0 3px rgba(43,122,138,0.1);
         }
 
         .search-section button {
@@ -288,15 +299,8 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             border-radius: 10px;
             cursor: pointer;
             font-weight: 500;
-            transition: all 0.3s;
         }
 
-        .search-section button:hover {
-            background: #1f5c6e;
-            transform: translateY(-2px);
-        }
-
-        /* Map and Doctors Layout */
         .map-doctors-layout {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -405,57 +409,12 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             cursor: pointer;
             margin-top: 10px;
             font-weight: 500;
-            transition: all 0.3s;
         }
 
         .btn-book:hover {
             background: #1f5c6e;
-            transform: translateY(-2px);
         }
 
-        .btn-book:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-        }
-
-        /* Offline Banner */
-        .offline-banner {
-            background: #fff3cd;
-            color: #856404;
-            padding: 10px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: none;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .offline-banner i {
-            font-size: 1.2rem;
-        }
-
-        /* Loading Spinner */
-        .loading-spinner {
-            text-align: center;
-            padding: 40px;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #2b7a8a;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Empty State */
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -468,18 +427,12 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             color: #dee2e6;
         }
 
-        /* Responsive */
         @media (max-width: 1024px) {
             .map-doctors-layout {
                 grid-template-columns: 1fr;
             }
-            
             #map {
                 height: 400px;
-            }
-            
-            .doctors-container {
-                max-height: 400px;
             }
         }
 
@@ -487,57 +440,37 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             .menu-toggle {
                 display: block;
             }
-
             .sidebar {
                 transform: translateX(-100%);
             }
-
             .sidebar.open {
                 transform: translateX(0);
             }
-
             .main-content {
                 margin-left: 0;
-                width: 100%;
                 padding: 20px 15px;
                 padding-top: 80px;
             }
-
             .page-header {
                 flex-direction: column;
                 text-align: center;
             }
-
             .search-section {
                 flex-direction: column;
             }
-
             .search-section input,
             .search-section select,
             .search-section button {
                 width: 100%;
             }
         }
-
-        @media (max-width: 480px) {
-            .page-header h1 {
-                font-size: 1.5rem;
-            }
-            
-            .doctor-header {
-                flex-direction: column;
-            }
-        }
     </style>
 </head>
 <body>
     
-    <!-- Mobile Menu Toggle -->
     <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">
         <i class="fas fa-bars"></i>
     </button>
-
-    <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
     <section class="dashboard">
@@ -547,61 +480,29 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
                 <p>Patient panel</p>
             </div>
             <ul class="nav-links">
-                <li onclick="window.location.href='patient-dashboard.php'"> 
-                   <i class="fa-solid fa-gauge"></i> 
-                   <span>Dashboard</span>
-                </li>
-                <li onclick="window.location.href='find-doctor.php'" class="active">
-                   <i class="fa-solid fa-stethoscope"></i> 
-                   <span>Find Doctor</span>
-                </li>
-                <li onclick="window.location.href='book-appointment.php'">
-                   <i class="fa-solid fa-calendar-plus"></i> 
-                   <span>Book Appointment</span>
-                </li>
-                <li onclick="window.location.href='consultation.php'">
-                    <i class="fa-solid fa-video"></i> 
-                    <span>Consultation</span>
-                 </li>
-                <li onclick="window.location.href='medical-reports.php'">
-                   <i class="fa-solid fa-notes-medical"></i> 
-                   <span>Medical Reports</span>
-                </li>
-                <li onclick="window.location.href='past-appointments.php'">
-                    <i class="fa-solid fa-calendar-days"></i> 
-                    <span>Past Appointments</span>
-                </li>
-                <li onclick="window.location.href='profile.php'">
-                    <i class="fa-solid fa-user"></i> 
-                    <span>Profile</span>
-                 </li>
-                <li onclick="logout('../index.php')">
-                  <i class="fa-solid fa-right-from-bracket"></i>
-                  <span>Logout</span>
-                </li>
+                <li onclick="window.location.href='patient-dashboard.php'"><i class="fa-solid fa-gauge"></i><span>Dashboard</span></li>
+                <li class="active"><i class="fa-solid fa-stethoscope"></i><span>Find Doctor</span></li>
+                <li onclick="window.location.href='book-appointment.php'"><i class="fa-solid fa-calendar-plus"></i><span>Book Appointment</span></li>
+                <li onclick="window.location.href='consultation.php'"><i class="fa-solid fa-video"></i><span>Consultation</span></li>
+                <li onclick="window.location.href='medical-reports.php'"><i class="fa-solid fa-notes-medical"></i><span>Medical Reports</span></li>
+                <li onclick="window.location.href='past-appointments.php'"><i class="fa-solid fa-calendar-days"></i><span>Past Appointments</span></li>
+                <li onclick="window.location.href='profile.php'"><i class="fa-solid fa-user"></i><span>Profile</span></li>
+                <li onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></li>
             </ul>
         </aside>
 
-        <div class="main-content" id="mainContent">
-            
-            <!-- Page Header -->
+        <div class="main-content">
             <div class="page-header">
                 <div>
                     <h1><i class="fas fa-search"></i> Find a Doctor</h1>
-                    <p>Search for qualified doctors near your location in Cameroon</p>
+                    <p>Search for qualified doctors near your location in Douala, Cameroon</p>
                 </div>
                 <div class="patient-badge">
                     <i class="fas fa-user"></i> <?php echo htmlspecialchars($patient_name); ?>
+                    <!-- <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($patient_area); ?>, Douala -->
                 </div>
             </div>
 
-            <!-- Offline Banner -->
-            <div id="offlineBanner" class="offline-banner">
-                <i class="fas fa-wifi-slash"></i>
-                <span>You are offline. Showing cached doctor data. Some features may be limited.</span>
-            </div>
-
-            <!-- Search Section -->
             <div class="search-section">
                 <input type="text" id="searchInput" placeholder="Search by doctor name or specialty...">
                 <select id="specialtyFilter">
@@ -614,26 +515,41 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
                     <option value="Neurologist">Neurologist</option>
                     <option value="Dentist">Dentist</option>
                 </select>
+                <select id="areaFilter">
+                    <option value="all">All Areas</option>
+                    <option value="Akwa">Akwa</option>
+                    <option value="Bonanjo">Bonanjo</option>
+                    <option value="Bonaberi">Bonaberi</option>
+                    <option value="Bonamoussadi">Bonamoussadi</option>
+                    <option value="New Bell">New Bell</option>
+                    <option value="Deido">Deido</option>
+                    <option value="Makepe">Makepe</option>
+                    <option value="Logbessou">Logbessou</option>
+                </select>
                 <select id="distanceFilter">
-                    <option value="10">Within 10 km</option>
+                    <option value="5">Within 5 km</option>
+                    <option value="10" selected>Within 10 km</option>
                     <option value="20">Within 20 km</option>
-                    <option value="50">Within 50 km</option>
-                    <option value="100" selected>Within 100 km</option>
                     <option value="all">All distances</option>
                 </select>
-                <button onclick="filterDoctors()">
-                    <i class="fas fa-search"></i> Search
-                </button>
+                <button onclick="filterDoctors()"><i class="fas fa-search"></i> Search</button>
             </div>
 
-            <!-- Map and Doctors Layout -->
             <div class="map-doctors-layout">
                 <div id="map"></div>
                 <div class="doctors-container" id="doctorsContainer">
-                    <div class="loading-spinner">
-                        <div class="spinner"></div>
-                        <p>Loading doctors near you...</p>
-                    </div>
+                    <?php if (empty($doctors)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-user-md"></i>
+                            <h3>No Approved Doctors Yet</h3>
+                            <p>There are no approved doctors in the system yet. Please check back later.</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>Loading doctors near you in Douala...</p>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -641,216 +557,132 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Patient location variables
-        let patientLat = null;
-        let patientLng = null;
+        // Patient location
+        let patientLat = <?php echo $patient_lat; ?>;
+        let patientLng = <?php echo $patient_lng; ?>;
+        let patientArea = '<?php echo htmlspecialchars($patient_area); ?>';
         let map = null;
         let markers = [];
         
-        // Doctor data from PHP
+        // Doctor data
         const doctorsData = <?php echo json_encode($doctors); ?>;
-        
-        // Cache doctors in localStorage for offline use
-        if (typeof(Storage) !== "undefined") {
-            localStorage.setItem('cachedDoctors', JSON.stringify(doctorsData));
-        }
-        
         let currentDoctors = [];
         let currentMarkers = [];
         
-        // Check offline status
-        function checkOnlineStatus() {
-            if (!navigator.onLine) {
-                document.getElementById('offlineBanner').style.display = 'flex';
-                // Load cached doctors
-                const cached = localStorage.getItem('cachedDoctors');
-                if (cached) {
-                    currentDoctors = JSON.parse(cached);
-                    displayDoctors(currentDoctors);
-                }
-            } else {
-                document.getElementById('offlineBanner').style.display = 'none';
-                currentDoctors = doctorsData;
-            }
-        }
+        // Area coordinates
+        const areaCoordinates = {
+            'Akwa': { lat: 4.0469, lng: 9.7043 },
+            'Bonanjo': { lat: 4.0500, lng: 9.7042 },
+            'Bonaberi': { lat: 4.0833, lng: 9.6833 },
+            'Bonamoussadi': { lat: 4.0833, lng: 9.7167 },
+            'New Bell': { lat: 4.0417, lng: 9.6958 },
+            'Deido': { lat: 4.0458, lng: 9.6896 },
+            'Makepe': { lat: 4.0708, lng: 9.6833 },
+            'Logbessou': { lat: 4.0972, lng: 9.7167 }
+        };
         
-        // Get patient location
-        function getPatientLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        patientLat = position.coords.latitude;
-                        patientLng = position.coords.longitude;
-                        initMap();
-                        displayDoctors(currentDoctors);
-                    },
-                    function(error) {
-                        console.error('Geolocation error:', error);
-                        // Default to Yaoundé, Cameroon
-                        patientLat = 3.8667;
-                        patientLng = 11.5167;
-                        initMap();
-                        displayDoctors(currentDoctors);
-                        alert('Unable to get your location. Showing doctors in Yaoundé area.');
-                    }
-                );
-            } else {
-                // Default to Yaoundé, Cameroon
-                patientLat = 3.8667;
-                patientLng = 11.5167;
-                initMap();
-                displayDoctors(currentDoctors);
-                alert('Geolocation not supported. Showing doctors in Yaoundé area.');
-            }
-        }
-        
-        // Initialize map
         function initMap() {
-            if (map) {
-                map.remove();
-            }
+            if (map) map.remove();
             
-            map = L.map('map').setView([patientLat, patientLng], 12);
+            map = L.map('map').setView([patientLat, patientLng], 14);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 19
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
             
-            // Add patient marker
+            // Patient marker
             L.marker([patientLat, patientLng], {
                 icon: L.divIcon({
-                    className: 'custom-div-icon',
-                    html: '<div style="background-color: #2b7a8a; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>',
-                    iconSize: [20, 20],
-                    popupAnchor: [0, -10]
+                    html: '<div style="background-color: #2b7a8a; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white;"></div>',
+                    iconSize: [20, 20]
                 })
-            }).addTo(map).bindPopup('<strong>You are here</strong>').openPopup();
+            }).addTo(map).bindPopup('<strong>Your Location</strong><br>' + patientArea + ', Douala').openPopup();
         }
         
-        // Calculate distance using Haversine formula
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Earth's radius in km
+            const R = 6371;
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
                       Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
         }
         
-        // Display doctors
         function displayDoctors(doctors) {
             const container = document.getElementById('doctorsContainer');
-            const distanceLimit = parseInt(document.getElementById('distanceFilter').value);
+            const distanceLimit = document.getElementById('distanceFilter').value;
             const specialtyFilter = document.getElementById('specialtyFilter').value;
+            const areaFilter = document.getElementById('areaFilter').value;
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             
-            // Clear existing markers
             if (currentMarkers.length) {
-                currentMarkers.forEach(marker => map.removeLayer(marker));
+                currentMarkers.forEach(m => map.removeLayer(m));
                 currentMarkers = [];
             }
             
-            // Filter doctors
-            let filteredDoctors = doctors.filter(doctor => {
-                if (!doctor.lat || !doctor.lng) return false;
-                
-                const distance = calculateDistance(patientLat, patientLng, doctor.lat, doctor.lng);
-                doctor.distance = distance;
-                
-                // Apply distance filter
-                if (distanceLimit !== 'all' && distance > distanceLimit) return false;
-                
-                // Apply specialty filter
-                if (specialtyFilter !== 'all' && doctor.specialty !== specialtyFilter) return false;
-                
-                // Apply search filter
-                if (searchTerm && !doctor.name.toLowerCase().includes(searchTerm) && 
-                    !doctor.specialty.toLowerCase().includes(searchTerm)) return false;
-                
+            let filtered = doctors.filter(doc => {
+                if (!doc.lat || !doc.lng) return false;
+                const distance = calculateDistance(patientLat, patientLng, doc.lat, doc.lng);
+                doc.distance = distance;
+                if (distanceLimit !== 'all' && distance > parseFloat(distanceLimit)) return false;
+                if (specialtyFilter !== 'all' && doc.specialty !== specialtyFilter) return false;
+                if (areaFilter !== 'all' && doc.area !== areaFilter) return false;
+                if (searchTerm && !doc.name.toLowerCase().includes(searchTerm) && 
+                    !doc.specialty.toLowerCase().includes(searchTerm)) return false;
                 return true;
             });
             
-            // Sort by distance
-            filteredDoctors.sort((a, b) => a.distance - b.distance);
+            filtered.sort((a, b) => a.distance - b.distance);
             
-            // Display doctors
-            if (filteredDoctors.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-user-md"></i>
-                        <h3>No Doctors Found</h3>
-                        <p>Try adjusting your filters or search criteria.</p>
-                    </div>
-                `;
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-user-md"></i><h3>No Doctors Found</h3><p>Try adjusting your filters.</p><p>📍 You are in: ${patientArea}, Douala</p></div>`;
                 return;
             }
             
-            container.innerHTML = filteredDoctors.map(doctor => `
+            container.innerHTML = filtered.map(doc => `
                 <div class="doctor-card">
                     <div class="doctor-header">
                         <div>
-                            <div class="doctor-name">${escapeHtml(doctor.name)}</div>
-                            <div class="specialty"><i class="fas fa-stethoscope"></i> ${escapeHtml(doctor.specialty)}</div>
-                            <div class="location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(doctor.city)}, ${escapeHtml(doctor.area)}</div>
-                            <div class="distance"><i class="fas fa-location-dot"></i> ${doctor.distance.toFixed(1)} km away</div>
-                            <div class="ratings"><i class="fas fa-star"></i> ${doctor.ratings} / 5.0</div>
-                            <div class="fee"><i class="fas fa-money-bill-wave"></i> ${doctor.consultation_fee.toLocaleString()} FCFA</div>
+                            <div class="doctor-name">${escapeHtml(doc.name)}</div>
+                            <div class="specialty"><i class="fas fa-stethoscope"></i> ${escapeHtml(doc.specialty)}</div>
+                            <div class="location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(doc.area)}, Douala</div>
+                            <div class="distance"><i class="fas fa-location-dot"></i> ${doc.distance.toFixed(1)} km away</div>
+                            <div class="ratings"><i class="fas fa-star"></i> ${doc.ratings} / 5.0</div>
+                            <div class="fee"><i class="fas fa-money-bill-wave"></i> ${doc.consultation_fee.toLocaleString()} FCFA</div>
                         </div>
-                        <span class="badge ${doctor.available ? 'badge-available' : 'badge-unavailable'}">
-                            ${doctor.available ? 'Available' : 'Unavailable'}
-                        </span>
+                        <span class="badge badge-available">✅ Available</span>
                     </div>
-                    <button class="btn-book" onclick="bookDoctor(${doctor.id})" ${!doctor.available ? 'disabled' : ''}>
+                    <button class="btn-book" onclick="bookDoctor(${doc.id})">
                         <i class="fas fa-calendar-plus"></i> Book Appointment
                     </button>
                 </div>
             `).join('');
             
-            // Add doctor markers to map
-            filteredDoctors.forEach(doctor => {
-                const marker = L.marker([doctor.lat, doctor.lng])
-                    .bindPopup(`
-                        <strong>${escapeHtml(doctor.name)}</strong><br>
-                        ${escapeHtml(doctor.specialty)}<br>
-                        ${escapeHtml(doctor.city)}<br>
-                        <strong>${doctor.distance.toFixed(1)} km away</strong><br>
-                        <button onclick="bookDoctor(${doctor.id})" style="margin-top: 5px; padding: 5px 10px; background: #2b7a8a; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                            Book Appointment
-                        </button>
-                    `)
+            filtered.forEach(doc => {
+                const marker = L.marker([doc.lat, doc.lng])
+                    .bindPopup(`<strong>${escapeHtml(doc.name)}</strong><br>${escapeHtml(doc.specialty)}<br>📍 ${escapeHtml(doc.area)}<br>📏 ${doc.distance.toFixed(1)} km away`)
                     .addTo(map);
                 currentMarkers.push(marker);
             });
             
-            // Adjust map bounds to show all markers
-            if (filteredDoctors.length > 0) {
+            if (filtered.length > 0) {
                 const bounds = L.latLngBounds([[patientLat, patientLng]]);
-                filteredDoctors.forEach(doctor => {
-                    bounds.extend([doctor.lat, doctor.lng]);
-                });
+                filtered.forEach(d => bounds.extend([d.lat, d.lng]));
                 map.fitBounds(bounds, { padding: [50, 50] });
             }
         }
         
-        // Filter doctors
         function filterDoctors() {
             displayDoctors(currentDoctors);
         }
         
-        // Book doctor
         function bookDoctor(doctorId) {
-            if (!navigator.onLine) {
-                alert('You are offline. Please connect to the internet to book an appointment.');
-                return;
-            }
             localStorage.setItem('selectedDoctorId', doctorId);
             window.location.href = 'book-appointment.php?doctor_id=' + doctorId;
         }
         
-        // Escape HTML to prevent XSS
         function escapeHtml(text) {
             if (!text) return '';
             const div = document.createElement('div');
@@ -858,74 +690,36 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             return div.innerHTML;
         }
         
-        // Sidebar toggle
         function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            sidebar.classList.toggle('open');
-            overlay.classList.toggle('active');
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('active');
         }
         
         function closeSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            sidebar.classList.remove('open');
-            overlay.classList.remove('active');
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('active');
         }
         
         function logout() {
-            if(confirm('Are you sure you want to logout?')) {
-                window.location.href = '../index.php';
-            }
+            if(confirm('Logout?')) window.location.href = '../index.php';
         }
         
-        // Initialize
         window.onload = function() {
-            checkOnlineStatus();
-            getPatientLocation();
+            currentDoctors = doctorsData;
+            initMap();
+            displayDoctors(currentDoctors);
             
-            // Listen for online/offline events
-            window.addEventListener('online', function() {
-                checkOnlineStatus();
-                currentDoctors = doctorsData;
-                displayDoctors(currentDoctors);
-            });
-            
-            window.addEventListener('offline', function() {
-                checkOnlineStatus();
-            });
+            document.getElementById('specialtyFilter').addEventListener('change', filterDoctors);
+            document.getElementById('areaFilter').addEventListener('change', filterDoctors);
+            document.getElementById('distanceFilter').addEventListener('change', filterDoctors);
+            document.getElementById('searchInput').addEventListener('input', filterDoctors);
         };
         
-        // Auto-close sidebar on mobile when clicking links
         document.querySelectorAll('.nav-links li').forEach(link => {
-            link.addEventListener('click', function() {
-                if (window.innerWidth <= 768) {
-                    setTimeout(closeSidebar, 150);
-                }
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) setTimeout(closeSidebar, 150);
             });
         });
-        
-        // Handle window resize
-        let resizeTimer;
-        window.addEventListener('resize', function() {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function() {
-                if (window.innerWidth > 768) {
-                    const sidebar = document.getElementById('sidebar');
-                    if (sidebar.classList.contains('open')) {
-                        closeSidebar();
-                    }
-                }
-                if (map) {
-                    setTimeout(() => map.invalidateSize(), 200);
-                }
-            }, 250);
-        });
-        
-        // Add event listeners for filters
-        document.getElementById('specialtyFilter').addEventListener('change', filterDoctors);
-        document.getElementById('distanceFilter').addEventListener('change', filterDoctors);
-        document.getElementById('searchInput').addEventListener('input', filterDoctors);
     </script>
 </body>
 </html>

@@ -22,7 +22,7 @@ $patient_name = $_SESSION['name'];
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $date_filter = isset($_GET['date']) ? $_GET['date'] : '';
 
-// Build the query
+// Build the query - FIXED to show all appointments including pending
 $sql = "SELECT a.*, 
         d.name as doctor_name,
         d.specialty as doctor_specialty,
@@ -38,6 +38,7 @@ $sql = "SELECT a.*,
         LEFT JOIN consultations c ON a.id = c.appointment_id
         WHERE a.patient_id = ?";
 
+// Apply status filter - IMPORTANT: 'pending' is a valid status
 if ($status_filter != 'all') {
     $sql .= " AND a.status = '$status_filter'";
 }
@@ -53,7 +54,10 @@ $stmt->bind_param("i", $patient_id);
 $stmt->execute();
 $appointments = $stmt->get_result();
 
-// Get statistics
+// Debug: Check if there are any appointments
+error_log("Total appointments found: " . $appointments->num_rows);
+
+// Get statistics - FIXED to include pending count correctly
 $stats_sql = "SELECT 
               COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
               COUNT(CASE WHEN status = 'approved' AND appointment_date >= CURDATE() THEN 1 END) as upcoming_count,
@@ -65,6 +69,9 @@ $stats_stmt = $conn->prepare($stats_sql);
 $stats_stmt->bind_param("i", $patient_id);
 $stats_stmt->execute();
 $stats = $stats_stmt->get_result()->fetch_assoc();
+
+// Debug: Log statistics
+error_log("Stats: " . print_r($stats, true));
 
 // Get next upcoming appointment
 $next_sql = "SELECT a.*, d.name as doctor_name, d.specialty, d.location 
@@ -78,7 +85,17 @@ $next_stmt = $conn->prepare($next_sql);
 $next_stmt->bind_param("i", $patient_id);
 $next_stmt->execute();
 $next_appointment = $next_stmt->get_result()->fetch_assoc();
+
+// Helper function to safely escape HTML
+function safeHtml($value, $default = 'Not provided') {
+    if ($value === null || $value === '') {
+        return $default;
+    }
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
 ?>
+
+<!-- The rest of your HTML remains the same until the appointments container -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -651,8 +668,8 @@ $next_appointment = $next_stmt->get_result()->fetch_assoc();
     <section class="dashboard">
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-stethoscope"></i> TeleMed</h2>
-                <p>Cameroon</p>
+                <h2><i class="fas fa-stethoscope"></i> TeleMed Connect</h2>
+                <p>Patient panel</p>
             </div>
             <ul class="nav-links">
                 <li onclick="window.location.href='patient-dashboard.php'"><i class="fa-solid fa-gauge"></i><span>Dashboard</span></li>
@@ -673,7 +690,7 @@ $next_appointment = $next_stmt->get_result()->fetch_assoc();
                     <p>View and manage all your appointments</p>
                 </div>
                 <div class="patient-badge">
-                    <i class="fas fa-user"></i> <?php echo htmlspecialchars($patient_name); ?>
+                    <i class="fas fa-user"></i> <?php echo safeHtml($patient_name); ?>
                 </div>
             </div>
 
@@ -699,14 +716,13 @@ $next_appointment = $next_stmt->get_result()->fetch_assoc();
                     <p>Cancelled</p>
                 </div>
             </div>
-
             <?php if($next_appointment): ?>
             <div class="next-appointment-card">
                 <div class="next-appointment-info">
                     <h3><i class="fas fa-calendar-check"></i> Next Appointment</h3>
-                    <p><strong>Dr. <?php echo htmlspecialchars($next_appointment['doctor_name']); ?></strong> - <?php echo htmlspecialchars($next_appointment['specialty']); ?></p>
+                    <p><strong>Dr. <?php echo safeHtml($next_appointment['doctor_name']); ?></strong> - <?php echo safeHtml($next_appointment['specialty']); ?></p>
                     <p><i class="fas fa-calendar"></i> <?php echo date('F j, Y', strtotime($next_appointment['appointment_date'])); ?> at <?php echo date('g:i A', strtotime($next_appointment['appointment_time'])); ?></p>
-                    <p><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($next_appointment['location']); ?></p>
+                    <p><i class="fas fa-map-marker-alt"></i> <?php echo safeHtml($next_appointment['location']); ?></p>
                 </div>
                 <button class="join-btn" onclick="window.location.href='consultation.php?id=<?php echo $next_appointment['id']; ?>'">
                     <i class="fas fa-video"></i> Join Consultation
@@ -719,7 +735,7 @@ $next_appointment = $next_stmt->get_result()->fetch_assoc();
                     <div class="filters">
                         <div class="filter-group">
                             <label><i class="fas fa-calendar"></i> Date</label>
-                            <input type="date" name="date" value="<?php echo $date_filter; ?>">
+                            <input type="date" name="date" value="<?php echo safeHtml($date_filter, ''); ?>">
                         </div>
                         <div class="filter-group">
                             <label>&nbsp;</label>
@@ -741,84 +757,110 @@ $next_appointment = $next_stmt->get_result()->fetch_assoc();
                 <button class="tab <?php echo $status_filter == 'cancelled' ? 'active' : ''; ?>" onclick="applyFilter('cancelled')">Cancelled</button>
             </div>
 
-            <div class="appointments-container">
-                <?php if ($appointments && $appointments->num_rows > 0): ?>
-                    <?php while($apt = $appointments->fetch_assoc()): ?>
-                        <div class="appointment-card <?php echo $apt['status']; ?>">
-                            <div class="appointment-header">
-                                <div>
-                                    <div class="doctor-name">Dr. <?php echo htmlspecialchars($apt['doctor_name']); ?></div>
-                                    <div class="specialty"><?php echo htmlspecialchars($apt['doctor_specialty']); ?></div>
-                                </div>
-                                <span class="badge badge-<?php echo $apt['status']; ?>">
-                                    <i class="fas <?php 
-                                        echo $apt['status'] == 'completed' ? 'fa-check-circle' : 
-                                            ($apt['status'] == 'approved' ? 'fa-calendar-check' : 
-                                            ($apt['status'] == 'pending' ? 'fa-clock' : 'fa-times-circle')); 
-                                    ?>"></i>
-                                    <?php echo ucfirst($apt['status']); ?>
-                                </span>
+                <!-- Appointments Container -->
+        <div class="appointments-container">
+            <?php if ($appointments && $appointments->num_rows > 0): ?>
+                <?php while($apt = $appointments->fetch_assoc()): ?>
+                    <?php 
+                    // Determine card class based on status
+                    $card_class = '';
+                    $badge_class = '';
+                    if ($apt['status'] == 'completed') {
+                        $card_class = 'completed';
+                        $badge_class = 'badge-completed';
+                    } elseif ($apt['status'] == 'approved') {
+                        $card_class = 'upcoming';
+                        $badge_class = 'badge-upcoming';
+                    } elseif ($apt['status'] == 'pending') {
+                        $card_class = 'pending';
+                        $badge_class = 'badge-pending';
+                    } elseif ($apt['status'] == 'cancelled') {
+                        $card_class = 'cancelled';
+                        $badge_class = 'badge-cancelled';
+                    } else {
+                        $card_class = 'pending';
+                        $badge_class = 'badge-pending';
+                    }
+                    ?>
+                    <div class="appointment-card <?php echo $card_class; ?>">
+                        <div class="appointment-header">
+                            <div>
+                                <div class="doctor-name">Dr. <?php echo safeHtml($apt['doctor_name']); ?></div>
+                                <div class="specialty"><?php echo safeHtml($apt['doctor_specialty']); ?></div>
                             </div>
-                            <div class="appointment-body">
-                                <div class="details-grid">
-                                    <div class="detail-item">
-                                        <i class="fas fa-calendar"></i>
-                                        <span><?php echo date('F j, Y', strtotime($apt['appointment_date'])); ?></span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-clock"></i>
-                                        <span><?php echo date('g:i A', strtotime($apt['appointment_time'])); ?></span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-comments"></i>
-                                        <span><?php echo ucfirst($apt['consultation_type']); ?> Consultation</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-map-marker-alt"></i>
-                                        <span><?php echo htmlspecialchars($apt['doctor_location']); ?></span>
-                                    </div>
+                            <span class="badge <?php echo $badge_class; ?>">
+                                <i class="fas <?php 
+                                    echo $apt['status'] == 'completed' ? 'fa-check-circle' : 
+                                        ($apt['status'] == 'approved' ? 'fa-calendar-check' : 
+                                        ($apt['status'] == 'pending' ? 'fa-clock' : 'fa-times-circle')); 
+                                ?>"></i>
+                                <?php echo ucfirst(safeHtml($apt['status'], 'pending')); ?>
+                            </span>
+                        </div>
+                        <div class="appointment-body">
+                            <div class="details-grid">
+                                <div class="detail-item">
+                                    <i class="fas fa-calendar"></i>
+                                    <span><?php echo date('F j, Y', strtotime($apt['appointment_date'])); ?></span>
                                 </div>
-                                
-                                <?php if(!empty($apt['reason'])): ?>
-                                <div class="reason">
-                                    <i class="fas fa-notes-medical"></i> <strong>Reason:</strong> <?php echo htmlspecialchars($apt['reason']); ?>
+                                <div class="detail-item">
+                                    <i class="fas fa-clock"></i>
+                                    <span><?php echo date('g:i A', strtotime($apt['appointment_time'])); ?></span>
                                 </div>
+                                <div class="detail-item">
+                                    <i class="fas fa-comments"></i>
+                                    <span><?php echo ucfirst(safeHtml($apt['consultation_type'], 'video')); ?> Consultation</span>
+                                </div>
+                                <div class="detail-item">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                    <span><?php echo safeHtml($apt['doctor_location']); ?></span>
+                                </div>
+                            </div>
+                            
+                            <?php if(!empty($apt['reason'])): ?>
+                            <div class="reason">
+                                <i class="fas fa-notes-medical"></i> <strong>Reason:</strong> <?php echo safeHtml($apt['reason']); ?>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <div class="action-buttons">
+                                <?php if($apt['status'] == 'approved'): ?>
+                                    <button onclick="window.location.href='consultation.php?id=<?php echo $apt['id']; ?>'" class="btn-icon btn-join">
+                                        <i class="fas fa-video"></i> Join Consultation
+                                    </button>
+                                    <button onclick="cancelAppointment(<?php echo $apt['id']; ?>)" class="btn-icon btn-cancel">
+                                        <i class="fas fa-times"></i> Cancel
+                                    </button>
+                                <?php elseif($apt['status'] == 'pending'): ?>
+                                    <button class="btn-icon btn-view" disabled style="background: #6c757d; cursor: not-allowed;">
+                                        <i class="fas fa-clock"></i> Waiting for Approval
+                                    </button>
                                 <?php endif; ?>
                                 
-                                <div class="action-buttons">
-                                    <?php if($apt['status'] == 'approved'): ?>
-                                        <button onclick="window.location.href='consultation.php?id=<?php echo $apt['id']; ?>'" class="btn-icon btn-join">
-                                            <i class="fas fa-video"></i> Join Consultation
-                                        </button>
-                                        <button onclick="cancelAppointment(<?php echo $apt['id']; ?>)" class="btn-icon btn-cancel">
-                                            <i class="fas fa-times"></i> Cancel
-                                        </button>
-                                    <?php endif; ?>
-                                    
-                                    <?php if($apt['status'] == 'completed'): ?>
-                                        <button onclick="window.location.href='medical-reports.php'" class="btn-icon btn-view">
-                                            <i class="fas fa-file-medical"></i> View Report
-                                        </button>
-                                    <?php endif; ?>
-                                    
-                                    <button onclick="viewDetails(<?php echo $apt['id']; ?>)" class="btn-icon btn-view">
-                                        <i class="fas fa-eye"></i> View Details
+                                <?php if($apt['status'] == 'completed'): ?>
+                                    <button onclick="window.location.href='medical-reports.php'" class="btn-icon btn-view">
+                                        <i class="fas fa-file-medical"></i> View Report
                                     </button>
-                                </div>
+                                <?php endif; ?>
+                                
+                                <button onclick="viewDetails(<?php echo $apt['id']; ?>)" class="btn-icon btn-view">
+                                    <i class="fas fa-eye"></i> View Details
+                                </button>
                             </div>
                         </div>
-                    <?php endwhile; ?>
-                <?php else: ?>
-                    <div class="empty-state">
-                        <i class="fas fa-calendar-times"></i>
-                        <h3>No Appointments Found</h3>
-                        <p>You have no appointments in this category.</p>
-                        <a href="find-doctor.php" class="btn-icon btn-view" style="margin-top: 15px; background: #2b7a8a;">
-                            <i class="fas fa-search"></i> Find a Doctor
-                        </a>
                     </div>
-                <?php endif; ?>
-            </div>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <div class="empty-state">
+                    <i class="fas fa-calendar-times"></i>
+                    <h3>No Appointments Found</h3>
+                    <p>You have no appointments in this category.</p>
+                    <a href="find-doctor.php" class="btn-icon btn-view" style="margin-top: 15px; background: #2b7a8a;">
+                        <i class="fas fa-search"></i> Find a Doctor
+                    </a>
+                </div>
+            <?php endif; ?>
+        </div>
         </div>
     </section>
 
@@ -907,7 +949,7 @@ $next_appointment = $next_stmt->get_result()->fetch_assoc();
         }
         
         function escapeHtml(text) {
-            if (!text) return '';
+            if (!text) return 'Not provided';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;

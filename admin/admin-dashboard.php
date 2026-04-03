@@ -668,7 +668,7 @@ $recent_appointments = $conn->query($recent_appointments_sql);
 
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-shield-alt"></i> TeleMed</h2>
+                <h2><i class="fas fa-shield-alt"></i> TeleMed Connect</h2>
                 <p>Admin Panel</p>
             </div>
             
@@ -726,8 +726,8 @@ $recent_appointments = $conn->query($recent_appointments_sql);
 
             <div class="dashboard-header">
                 <div class="welcome">
-                    <h1>Welcome, <?php echo htmlspecialchars($admin_name); ?> 👋</h1>
-                    <p>Telemedicine Platform Administration - Cameroon</p>
+                    <h1>Welcome, <?php echo htmlspecialchars($admin_name); ?></h1>
+                    <p>TeleMed Connect Administration</p>
                 </div>
                 <div class="admin-badge">
                     <i class="fas fa-shield-alt"></i> Administrator

@@ -694,7 +694,7 @@ $active_users = $active_users_result ? $active_users_result->fetch_assoc()['tota
 
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-shield-alt"></i> TeleMed</h2>
+                <h2><i class="fas fa-shield-alt"></i> TeleMed connect</h2>
                 <p>Admin Panel</p>
             </div>
             

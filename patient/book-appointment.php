@@ -22,37 +22,9 @@ $patient_name = $_SESSION['name'];
 $doctor_id = isset($_GET['doctor_id']) ? intval($_GET['doctor_id']) : 
              (isset($_SESSION['selected_doctor_id']) ? $_SESSION['selected_doctor_id'] : 0);
 
-// Debug: Log the doctor ID
-error_log("Book appointment page - Doctor ID: " . $doctor_id);
-
-// If no doctor ID, show error message
+// If no doctor ID, redirect to find doctor page
 if ($doctor_id <= 0) {
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Error - No Doctor Selected | TeleMed Cameroon</title>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
-            body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-            .error-container { max-width: 500px; background: white; border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
-            .error-icon { font-size: 80px; color: #dc3545; margin-bottom: 20px; }
-            .btn { display: inline-block; padding: 12px 30px; background: #2b7a8a; color: white; text-decoration: none; border-radius: 10px; margin-top: 20px; }
-        </style>
-    </head>
-    <body>
-        <div class="error-container">
-            <div class="error-icon"><i class="fas fa-exclamation-triangle"></i></div>
-            <h1>No Doctor Selected</h1>
-            <p>Please select a doctor from the Find Doctor page first.</p>
-            <a href="find-doctor.php" class="btn"><i class="fas fa-arrow-left"></i> Find a Doctor</a>
-        </div>
-    </body>
-    </html>
-    <?php
+    header("Location: find-doctor.php");
     exit();
 }
 
@@ -66,70 +38,31 @@ $stmt->bind_param("i", $doctor_id);
 $stmt->execute();
 $doctor = $stmt->get_result()->fetch_assoc();
 
-// If doctor not found, show error
+// If doctor not found, redirect
 if (!$doctor) {
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Error - Doctor Not Found | TeleMed Cameroon</title>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
-            body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-            .error-container { max-width: 500px; background: white; border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
-            .btn { display: inline-block; padding: 12px 30px; background: #2b7a8a; color: white; text-decoration: none; border-radius: 10px; margin-top: 20px; }
-        </style>
-    </head>
-    <body>
-        <div class="error-container">
-            <div class="error-icon"><i class="fas fa-search"></i></div>
-            <h1>Doctor Not Found</h1>
-            <p>The doctor you're trying to book with does not exist.</p>
-            <a href="find-doctor.php" class="btn"><i class="fas fa-arrow-left"></i> Find a Doctor</a>
-        </div>
-    </body>
-    </html>
-    <?php
+    header("Location: find-doctor.php");
     exit();
 }
 
 // Get doctor details
 $doctor_name = $doctor['name'];
 $doctor_specialty = $doctor['specialty'] ?? 'General Practitioner';
-$doctor_location = $doctor['location'] ?? 'Cameroon';
+$doctor_location = $doctor['location'] ?? 'Douala';
 $doctor_experience = $doctor['experience'] ?? '5+ years';
 $doctor_fee = $doctor['consultation_fee'] ?? 5000;
 $doctor_rating = 4.5;
-$doctor_email = $doctor['email'] ?? '';
-$doctor_phone = $doctor['phone'] ?? '';
 
-// Get available time slots
+// Get available time slots (30-minute intervals)
 $time_slots = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
+    '12:00', '12:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
 ];
-
-// Get booked slots for today (if needed)
-$today = date('Y-m-d');
-$booked_slots = [];
-$booked_sql = "SELECT appointment_time FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status NOT IN ('cancelled', 'completed')";
-$booked_stmt = $conn->prepare($booked_sql);
-$booked_stmt->bind_param("is", $doctor_id, $today);
-$booked_stmt->execute();
-$booked_result = $booked_stmt->get_result();
-while ($row = $booked_result->fetch_assoc()) {
-    $booked_slots[] = $row['appointment_time'];
-}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Book Appointment | Patient Dashboard | TeleMed Cameroon</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -180,7 +113,6 @@ while ($row = $booked_result->fetch_assoc()) {
             bottom: 0;
             background: rgba(0,0,0,0.5);
             z-index: 999;
-            transition: all 0.3s ease;
         }
 
         .sidebar-overlay.active {
@@ -199,15 +131,8 @@ while ($row = $booked_result->fetch_assoc()) {
             font-weight: 600;
         }
 
-        .logo p {
-            font-size: 0.8rem;
-            opacity: 0.8;
-            margin-top: 5px;
-        }
-
         .nav-links {
             list-style: none;
-            padding: 0;
         }
 
         .nav-links li {
@@ -225,10 +150,6 @@ while ($row = $booked_result->fetch_assoc()) {
         .nav-links li i {
             font-size: 18px;
             width: 24px;
-        }
-
-        .nav-links li span {
-            font-size: 0.95rem;
         }
 
         .nav-links li:hover {
@@ -419,6 +340,45 @@ while ($row = $booked_result->fetch_assoc()) {
             transform: translateY(-2px);
         }
 
+        .btn-submit:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            animation: slideDown 0.3s ease;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         @media (max-width: 768px) {
             .menu-toggle {
                 display: block;
@@ -486,6 +446,9 @@ while ($row = $booked_result->fetch_assoc()) {
                 </div>
             </div>
 
+            <!-- Alert Messages -->
+            <div id="alertMessage" class="alert"></div>
+
             <div class="appointment-container">
                 <div class="doctor-info-card">
                     <div class="doctor-header">
@@ -513,13 +476,8 @@ while ($row = $booked_result->fetch_assoc()) {
                                 <label><i class="fas fa-clock"></i> Time</label>
                                 <select id="appointmentTime" required>
                                     <option value="">Select time</option>
-                                    <?php foreach($time_slots as $slot): 
-                                        $disabled = in_array($slot, $booked_slots) ? 'disabled' : '';
-                                    ?>
-                                        <option value="<?php echo $slot; ?>" <?php echo $disabled; ?>>
-                                            <?php echo date('h:i A', strtotime($slot)); ?>
-                                            <?php echo $disabled ? ' (Booked)' : ''; ?>
-                                        </option>
+                                    <?php foreach($time_slots as $slot): ?>
+                                        <option value="<?php echo $slot; ?>"><?php echo date('h:i A', strtotime($slot)); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -535,7 +493,9 @@ while ($row = $booked_result->fetch_assoc()) {
                             <label><i class="fas fa-notes-medical"></i> Reason for Consultation</label>
                             <textarea id="reason" rows="4" placeholder="Describe your symptoms or reason for consultation..." required></textarea>
                         </div>
-                        <button type="submit" class="btn-submit"><i class="fas fa-check-circle"></i> Confirm Appointment</button>
+                        <button type="submit" class="btn-submit" id="submitBtn">
+                            <i class="fas fa-check-circle"></i> Confirm Appointment
+                        </button>
                     </form>
                 </div>
             </div>
@@ -546,12 +506,27 @@ while ($row = $booked_result->fetch_assoc()) {
         const doctorData = {
             id: <?php echo $doctor_id; ?>,
             name: '<?php echo addslashes($doctor_name); ?>',
-            specialty: '<?php echo addslashes($doctor_specialty); ?>',
             fee: <?php echo $doctor_fee; ?>
         };
         
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('appointmentDate').min = today;
+        
+        // Set default date to tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('appointmentDate').value = tomorrow.toISOString().split('T')[0];
+        
+        function showAlert(message, type) {
+            const alertDiv = document.getElementById('alertMessage');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
+            alertDiv.style.display = 'flex';
+            
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
         
         async function submitAppointment(event) {
             event.preventDefault();
@@ -562,7 +537,13 @@ while ($row = $booked_result->fetch_assoc()) {
             const reason = document.getElementById('reason').value;
             
             if (!appointmentDate || !appointmentTime || !consultationType || !reason) {
-                alert('Please fill in all fields');
+                showAlert('Please fill in all fields', 'error');
+                return false;
+            }
+            
+            // Validate date is not in the past
+            if (appointmentDate < today) {
+                showAlert('Please select a future date', 'error');
                 return false;
             }
             
@@ -574,23 +555,36 @@ while ($row = $booked_result->fetch_assoc()) {
                 reason: reason
             };
             
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking...';
+            
             try {
                 const response = await fetch('../api/book-appointment.php', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(appointment)
                 });
                 
                 const result = await response.json();
                 
                 if (result.success) {
-                    alert('✅ Appointment booked successfully!');
-                    window.location.href = 'patient-dashboard.php';
+                    showAlert('✅ ' + result.message, 'success');
+                    setTimeout(() => {
+                        window.location.href = 'my-appointments.php';
+                    }, 2000);
                 } else {
-                    alert('❌ Error: ' + result.message);
+                    showAlert('❌ ' + result.message, 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Appointment';
                 }
             } catch (error) {
-                alert('Network error. Please try again.');
+                console.error('Error:', error);
+                showAlert('Network error. Please check your connection and try again.', 'error');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Appointment';
             }
             
             return false;
@@ -607,11 +601,15 @@ while ($row = $booked_result->fetch_assoc()) {
         }
         
         function logout() {
-            if(confirm('Logout?')) window.location.href = '../index.php';
+            if(confirm('Are you sure you want to logout?')) {
+                window.location.href = '../index.php';
+            }
         }
         
         document.querySelectorAll('.nav-links li').forEach(link => {
-            link.addEventListener('click', () => { if (window.innerWidth <= 768) setTimeout(closeSidebar, 150); });
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) setTimeout(closeSidebar, 150);
+            });
         });
         
         let resizeTimer;
@@ -621,11 +619,6 @@ while ($row = $booked_result->fetch_assoc()) {
                 if (window.innerWidth > 768 && document.getElementById('sidebar').classList.contains('open')) closeSidebar();
             }, 250);
         });
-        
-        // Set default date to tomorrow
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        document.getElementById('appointmentDate').value = tomorrow.toISOString().split('T')[0];
     </script>
 </body>
 </html>

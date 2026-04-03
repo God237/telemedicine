@@ -556,7 +556,7 @@ $total_doctors = $total_doctors_result ? $total_doctors_result->fetch_assoc()['t
 
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-shield-alt"></i> TeleMed</h2>
+                <h2><i class="fas fa-shield-alt"></i> TeleMed Connect</h2>
                 <p>Admin Panel</p>
             </div>
             

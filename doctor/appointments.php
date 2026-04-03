@@ -452,8 +452,8 @@ $today_count = $today_stmt->get_result()->fetch_assoc()['count'];
     <section class="dashboard">
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-stethoscope"></i> TeleMed</h2>
-                <p>Cameroon</p>
+                <h2><i class="fas fa-stethoscope"></i> TeleMed Connect</h2>
+                <p>Doctor panel</p>
             </div>
             <ul class="nav-links">
                 <li onclick="window.location.href='doctor-dashboard.php'"> 

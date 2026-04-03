@@ -623,10 +623,10 @@
                 <div class="check-circle"><i class="fas fa-check"></i></div>
                 <div class="feature-text"><span class="highlight-point">24/7 access</span> to medical records and prescriptions</div>
             </div>
-            <div class="feature-row">
+            <!-- <div class="feature-row">
                 <div class="check-circle"><i class="fas fa-check"></i></div>
                 <div class="feature-text">Affordable healthcare <span class="highlight-point">starting from 5000 FCFA</span> per consultation</div>
-            </div>
+            </div> -->
         </div>
     </div>
 

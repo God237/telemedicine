@@ -696,7 +696,7 @@ $inactive_users = $inactive_users_result ? $inactive_users_result->fetch_assoc()
 
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-shield-alt"></i> TeleMed</h2>
+                <h2><i class="fas fa-shield-alt"></i> TeleMed Connect</h2>
                 <p>Admin Panel</p>
             </div>
             

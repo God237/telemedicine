@@ -589,7 +589,7 @@ for ($i = 5; $i >= 0; $i--) {
 
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-shield-alt"></i> TeleMed</h2>
+                <h2><i class="fas fa-shield-alt"></i> TeleMed Connect</h2>
                 <p>Admin Panel</p>
             </div>
             

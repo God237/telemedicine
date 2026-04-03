@@ -1,50 +1,62 @@
 <?php
 session_start();
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 // Check if user is logged in and is a doctor
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != "doctor") {
     header("Location: ../login.php");
     exit();
 }
 
-// Include database configuration with correct path
+// Include database configuration
 require_once dirname(__DIR__) . '/config.php';
 
 // Get doctor information
 $doctor_id = $_SESSION['user_id'];
 $doctor_name = $_SESSION['name'];
 
-// Fetch pending appointments for this specific doctor
+// Debug: Check if doctor ID is correct
+error_log("Doctor ID: " . $doctor_id);
+
+// ==================== FETCH PENDING APPOINTMENTS ====================
 $sql = "SELECT a.*, 
         u.name as patient_name,
-        u.email as patient_email
+        u.email as patient_email,
+        u.phone as patient_phone
         FROM appointments a
         JOIN users u ON a.patient_id = u.id
         WHERE a.doctor_id = ? AND a.status = 'pending'
-        ORDER BY a.appointment_date DESC, a.appointment_time DESC";
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC";
 
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $doctor_id);
 $stmt->execute();
-$result = $stmt->get_result();
+$pending_result = $stmt->get_result();
 
-// Fetch upcoming approved appointments
+// Debug: Check how many pending appointments found
+error_log("Pending appointments count: " . $pending_result->num_rows);
+
+// ==================== FETCH UPCOMING APPROVED APPOINTMENTS ====================
 $upcoming_sql = "SELECT a.*, 
                  u.name as patient_name,
-                 u.email as patient_email
+                 u.email as patient_email,
+                 u.phone as patient_phone
                  FROM appointments a
                  JOIN users u ON a.patient_id = u.id
                  WHERE a.doctor_id = ? AND a.status = 'approved' 
                  AND a.appointment_date >= CURDATE()
                  ORDER BY a.appointment_date ASC, a.appointment_time ASC
-                 LIMIT 5";
+                 LIMIT 10";
 
 $upcoming_stmt = $conn->prepare($upcoming_sql);
 $upcoming_stmt->bind_param("i", $doctor_id);
 $upcoming_stmt->execute();
 $upcoming_result = $upcoming_stmt->get_result();
 
-// Get statistics
+// ==================== GET STATISTICS ====================
 $stats_sql = "SELECT 
               COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count,
               COUNT(CASE WHEN status = 'approved' AND appointment_date >= CURDATE() THEN 1 END) as today_count,
@@ -56,15 +68,27 @@ $stats_stmt = $conn->prepare($stats_sql);
 $stats_stmt->bind_param("i", $doctor_id);
 $stats_stmt->execute();
 $stats = $stats_stmt->get_result()->fetch_assoc();
+
+// Debug: Log statistics
+error_log("Stats - Pending: " . ($stats['pending_count'] ?? 0) . 
+          ", Today: " . ($stats['today_count'] ?? 0) . 
+          ", Completed: " . ($stats['completed_count'] ?? 0));
+
+// Helper function for safe HTML output
+function safeHtml($value, $default = 'Not provided') {
+    if ($value === null || $value === '') {
+        return $default;
+    }
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Doctor Dashboard | Telemed Connect Cameroon</title>
+    <title>Doctor Dashboard | TeleMed Cameroon</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         * {
@@ -86,7 +110,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             position: relative;
         }
 
-        /* Sidebar Styles - Enhanced for mobile */
+        /* Sidebar Styles */
         .sidebar {
             width: 280px;
             height: 100vh;
@@ -102,12 +126,10 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             z-index: 1000;
         }
 
-        /* Sidebar closed state for mobile */
         .sidebar.closed {
             transform: translateX(-100%);
         }
 
-        /* Overlay for mobile when sidebar is open */
         .sidebar-overlay {
             display: none;
             position: fixed;
@@ -185,7 +207,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             color: white;
         }
 
-        /* Mobile Menu Toggle Button */
+        /* Mobile Menu Toggle */
         .menu-toggle {
             display: none;
             position: fixed;
@@ -218,14 +240,13 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             width: calc(100% - 280px);
         }
 
-        /* When sidebar is closed, main content expands */
         .main-content.expanded {
             margin-left: 0;
             width: 100%;
         }
 
-        /* Header */
-        .dashboard-header {
+        /* Page Header */
+        .page-header {
             background: white;
             padding: 20px 30px;
             border-radius: 16px;
@@ -238,14 +259,15 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             gap: 15px;
         }
 
-        .welcome h1 {
+        .page-header h1 {
             font-size: 1.8rem;
             color: #1a3a4a;
             margin-bottom: 5px;
         }
 
-        .welcome p {
+        .page-header p {
             color: #6c757d;
+            margin-top: 5px;
         }
 
         .doctor-badge {
@@ -256,7 +278,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             font-weight: 500;
         }
 
-        /* Stats Cards - Responsive Grid */
+        /* Stats Cards */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -269,7 +291,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             padding: 25px;
             border-radius: 16px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            transition: transform 0.3s, box-shadow 0.3s;
+            transition: transform 0.3s;
             text-align: center;
             cursor: pointer;
         }
@@ -281,8 +303,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
 
         .stat-card i {
             font-size: 2.5rem;
-            color: #2b7a8a;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
 
         .stat-card h3 {
@@ -295,6 +316,10 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             color: #6c757d;
             font-size: 0.9rem;
         }
+
+        .stat-card.pending i { color: #f39c12; }
+        .stat-card.today i { color: #3498db; }
+        .stat-card.completed i { color: #2ecc71; }
 
         /* Appointments Section */
         .section-title {
@@ -309,7 +334,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
 
         .section-title h2 {
             color: #1a3a4a;
-            font-size: 1.5rem;
+            font-size: 1.3rem;
         }
 
         .view-all {
@@ -329,12 +354,16 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             margin-bottom: 15px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             transition: all 0.3s;
-            border-left: 4px solid #ffc107;
+            border-left: 4px solid #f39c12;
         }
 
         .appointment-card:hover {
             transform: translateX(5px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .appointment-card.upcoming {
+            border-left-color: #2ecc71;
         }
 
         .appointment-header {
@@ -378,7 +407,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             width: 20px;
         }
 
-        .symptoms {
+        .reason {
             background: #f8f9fa;
             padding: 12px;
             border-radius: 12px;
@@ -438,33 +467,28 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             transform: translateY(-2px);
         }
 
-        /* Upcoming Appointments */
-        .upcoming-card {
-            border-left-color: #28a745;
-        }
-
         /* Badge Styles */
         .badge {
             padding: 4px 12px;
             border-radius: 20px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 600;
             display: inline-block;
         }
 
         .badge-pending {
-            background: #ffc107;
-            color: #000;
+            background: #fff3cd;
+            color: #856404;
         }
 
         .badge-approved {
-            background: #28a745;
-            color: white;
+            background: #d4edda;
+            color: #155724;
         }
 
         .badge-completed {
-            background: #17a2b8;
-            color: white;
+            background: #cce5ff;
+            color: #004085;
         }
 
         /* Empty State */
@@ -516,13 +540,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             border: 1px solid #f5c6cb;
         }
 
-        /* Responsive Design */
-        @media (max-width: 1024px) {
-            .stats-grid {
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            }
-        }
-
+        /* Responsive */
         @media (max-width: 768px) {
             .menu-toggle {
                 display: block;
@@ -543,47 +561,22 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
                 padding-top: 80px;
             }
 
-            .dashboard-header {
+            .page-header {
                 flex-direction: column;
                 text-align: center;
             }
 
-            .welcome h1 {
-                font-size: 1.5rem;
-            }
-
             .stats-grid {
                 grid-template-columns: 1fr;
-                gap: 15px;
-            }
-
-            .stat-card {
-                padding: 20px;
-            }
-
-            .stat-card h3 {
-                font-size: 1.8rem;
-            }
-
-            .section-title h2 {
-                font-size: 1.2rem;
-            }
-
-            .appointment-card {
-                padding: 15px;
             }
 
             .appointment-details {
-                gap: 10px;
-            }
-
-            .detail-item {
-                font-size: 0.85rem;
+                flex-direction: column;
+                gap: 8px;
             }
 
             .action-buttons {
                 flex-direction: column;
-                gap: 8px;
             }
 
             .btn {
@@ -593,100 +586,31 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
         }
 
         @media (max-width: 480px) {
-            .main-content {
-                padding: 15px;
-                padding-top: 70px;
-            }
-
-            .dashboard-header {
-                padding: 15px 20px;
-            }
-
-            .welcome h1 {
-                font-size: 1.2rem;
-            }
-
-            .welcome p {
-                font-size: 0.85rem;
-            }
-
-            .doctor-badge {
-                font-size: 0.85rem;
-                padding: 6px 15px;
-            }
-
-            .stat-card {
-                padding: 15px;
-            }
-
-            .stat-card i {
-                font-size: 2rem;
-            }
-
-            .stat-card h3 {
+            .page-header h1 {
                 font-size: 1.5rem;
-            }
-
-            .section-title h2 {
-                font-size: 1rem;
             }
 
             .patient-info h3 {
                 font-size: 1rem;
             }
-
-            .badge {
-                font-size: 0.7rem;
-                padding: 3px 8px;
-            }
-
-            .symptoms {
-                font-size: 0.85rem;
-            }
-        }
-
-        /* Smooth scrolling */
-        html {
-            scroll-behavior: smooth;
-        }
-
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 10px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #555;
         }
     </style>
 </head>
 <body>
     
-    <!-- Mobile Menu Toggle Button -->
+    <!-- Mobile Menu Toggle -->
     <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">
         <i class="fas fa-bars"></i>
     </button>
 
-    <!-- Sidebar Overlay for Mobile -->
+    <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
     <section class="dashboard">
-
         <aside class="sidebar" id="sidebar">
             <div class="logo">
-                <h2><i class="fas fa-stethoscope"></i> TeleMed</h2>
-                <p>Cameroon</p>
+                <h2><i class="fas fa-stethoscope"></i> TeleMed Connect</h2>
+                <p>Doctor panel</p>
             </div>
             
             <ul class="nav-links">
@@ -741,7 +665,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
                 </div>
             <?php endif; ?>
 
-            <div class="dashboard-header">
+            <div class="page-header">
                 <div class="welcome">
                     <h1>Welcome, Dr. <?php echo htmlspecialchars($doctor_name); ?> 👋</h1>
                     <p>Here's what's happening with your practice today</p>
@@ -753,17 +677,17 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
 
             <!-- Statistics Cards -->
             <div class="stats-grid">
-                <div class="stat-card" onclick="window.location.href='appointments.php?status=pending'">
+                <div class="stat-card pending" onclick="window.location.href='appointments.php?status=pending'">
                     <i class="fas fa-clock"></i>
                     <h3><?php echo $stats['pending_count'] ?? 0; ?></h3>
                     <p>Pending Appointments</p>
                 </div>
-                <div class="stat-card" onclick="window.location.href='appointments.php?status=today'">
+                <div class="stat-card today" onclick="window.location.href='appointments.php?status=today'">
                     <i class="fas fa-calendar-day"></i>
                     <h3><?php echo $stats['today_count'] ?? 0; ?></h3>
                     <p>Today's Appointments</p>
                 </div>
-                <div class="stat-card" onclick="window.location.href='appointments.php?status=completed'">
+                <div class="stat-card completed" onclick="window.location.href='appointments.php?status=completed'">
                     <i class="fas fa-check-circle"></i>
                     <h3><?php echo $stats['completed_count'] ?? 0; ?></h3>
                     <p>Completed Consultations</p>
@@ -776,13 +700,16 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
                 <a href="appointments.php?status=pending" class="view-all">View All →</a>
             </div>
 
-            <?php if ($result && $result->num_rows > 0): ?>
-                <?php while($row = $result->fetch_assoc()): ?>
+            <?php if ($pending_result && $pending_result->num_rows > 0): ?>
+                <?php while($row = $pending_result->fetch_assoc()): ?>
                     <div class="appointment-card">
                         <div class="appointment-header">
                             <div class="patient-info">
-                                <h3><?php echo htmlspecialchars($row['patient_name']); ?></h3>
-                                <p><i class="fas fa-envelope"></i> <?php echo htmlspecialchars($row['patient_email']); ?></p>
+                                <h3><?php echo safeHtml($row['patient_name']); ?></h3>
+                                <p><i class="fas fa-envelope"></i> <?php echo safeHtml($row['patient_email']); ?></p>
+                                <?php if(!empty($row['patient_phone'])): ?>
+                                <p><i class="fas fa-phone"></i> <?php echo safeHtml($row['patient_phone']); ?></p>
+                                <?php endif; ?>
                             </div>
                             <span class="badge badge-pending">
                                 <i class="fas fa-clock"></i> Pending
@@ -805,9 +732,8 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
                         </div>
                         
                         <?php if(!empty($row['reason'])): ?>
-                        <div class="symptoms">
-                            <i class="fas fa-notes-medical"></i> <strong>Reason for consultation:</strong><br>
-                            <?php echo htmlspecialchars($row['reason']); ?>
+                        <div class="reason">
+                            <i class="fas fa-notes-medical"></i> <strong>Reason:</strong> <?php echo safeHtml($row['reason']); ?>
                         </div>
                         <?php endif; ?>
                         
@@ -824,8 +750,9 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-calendar-check"></i>
-                    <p>No pending appointments at the moment</p>
-                    <small style="color: #6c757d;">When patients book appointments, they will appear here</small>
+                    <h3>No Pending Appointments</h3>
+                    <p>When patients book appointments, they will appear here.</p>
+                    <small style="color: #6c757d;">Make sure you have approved doctors in the system.</small>
                 </div>
             <?php endif; ?>
 
@@ -837,11 +764,11 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
 
             <?php if ($upcoming_result && $upcoming_result->num_rows > 0): ?>
                 <?php while($row = $upcoming_result->fetch_assoc()): ?>
-                    <div class="appointment-card upcoming-card">
+                    <div class="appointment-card upcoming">
                         <div class="appointment-header">
                             <div class="patient-info">
-                                <h3><?php echo htmlspecialchars($row['patient_name']); ?></h3>
-                                <p><i class="fas fa-envelope"></i> <?php echo htmlspecialchars($row['patient_email']); ?></p>
+                                <h3><?php echo safeHtml($row['patient_name']); ?></h3>
+                                <p><i class="fas fa-envelope"></i> <?php echo safeHtml($row['patient_email']); ?></p>
                             </div>
                             <span class="badge badge-approved">
                                 <i class="fas fa-check-circle"></i> Approved
@@ -864,13 +791,13 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
                         </div>
                         
                         <?php if(!empty($row['reason'])): ?>
-                        <div class="symptoms">
-                            <i class="fas fa-notes-medical"></i> <strong>Reason:</strong> <?php echo htmlspecialchars($row['reason']); ?>
+                        <div class="reason">
+                            <i class="fas fa-notes-medical"></i> <strong>Reason:</strong> <?php echo safeHtml($row['reason']); ?>
                         </div>
                         <?php endif; ?>
                         
                         <div class="action-buttons">
-                            <a href="start-consultation.php?id=<?php echo $row['id']; ?>" class="btn btn-consult">
+                            <a href="consultation.php?id=<?php echo $row['id']; ?>" class="btn btn-consult">
                                 <i class="fas fa-video"></i> Start Consultation
                             </a>
                         </div>
@@ -879,13 +806,12 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-calendar-day"></i>
-                    <p>No upcoming appointments scheduled</p>
-                    <small style="color: #6c757d;">Approved appointments will appear here</small>
+                    <h3>No Upcoming Appointments</h3>
+                    <p>Approved appointments will appear here.</p>
                 </div>
             <?php endif; ?>
 
         </div>
-
     </section>
 
     <script>
@@ -898,7 +824,6 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             sidebar.classList.toggle('open');
             overlay.classList.toggle('active');
             
-            // Change icon based on sidebar state
             if (sidebar.classList.contains('open')) {
                 menuToggle.innerHTML = '<i class="fas fa-times"></i>';
             } else {
@@ -922,7 +847,7 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
             }
         }
         
-        // Auto-close sidebar when clicking on a link (mobile)
+        // Auto-close sidebar on mobile when clicking links
         document.querySelectorAll('.nav-links li').forEach(link => {
             link.addEventListener('click', function() {
                 if (window.innerWidth <= 768) {
@@ -960,14 +885,6 @@ $stats = $stats_stmt->get_result()->fetch_assoc();
                 }, 5000);
             });
         }, 1000);
-        
-        // Optional: Auto-refresh pending appointments every 60 seconds
-        // Uncomment if you want automatic refresh
-        /*
-        setTimeout(function() {
-            location.reload();
-        }, 60000);
-        */
     </script>
 </body>
 </html>

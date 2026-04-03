@@ -1,6 +1,7 @@
 <?php
 session_start();
 
+// Check if user is logged in and is an admin
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != "admin") {
     header("Location: ../login.php");
     exit();
@@ -10,9 +11,15 @@ require_once dirname(__DIR__) . '/config.php';
 
 if (isset($_GET['id'])) {
     $user_id = $_GET['id'];
-    $action = isset($_GET['action']) ? $_GET['action'] : 'permanent';
     
-    // Get user details for message
+    // Don't allow admin to delete themselves
+    if ($user_id == $_SESSION['user_id']) {
+        $_SESSION['error'] = "You cannot delete your own account.";
+        header("Location: manage-users.php");
+        exit();
+    }
+    
+    // Get user details for the message
     $name_sql = "SELECT name, role FROM users WHERE id = ?";
     $name_stmt = $conn->prepare($name_sql);
     $name_stmt->bind_param("i", $user_id);
@@ -51,9 +58,9 @@ if (isset($_GET['id'])) {
             $stmt->bind_param("i", $user_id);
             $stmt->execute();
             
-            // Delete consultation medical data
-            $delete_medical = "DELETE FROM consultation_medical_data WHERE consultation_id IN (SELECT id FROM consultations WHERE patient_id = ? OR doctor_id = ?)";
-            $stmt = $conn->prepare($delete_medical);
+            // Delete prescriptions
+            $delete_prescriptions = "DELETE FROM prescriptions WHERE patient_id = ? OR doctor_id = ?";
+            $stmt = $conn->prepare($delete_prescriptions);
             $stmt->bind_param("ii", $user_id, $user_id);
             $stmt->execute();
             
@@ -78,6 +85,6 @@ if (isset($_GET['id'])) {
     }
 }
 
-header("Location: remove-accounts.php");
+header("Location: manage-users.php");
 exit();
 ?>
