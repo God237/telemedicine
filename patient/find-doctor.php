@@ -14,18 +14,21 @@ require_once dirname(__DIR__) . '/config.php';
 $patient_id = $_SESSION['user_id'];
 $patient_name = $_SESSION['name'];
 
-// Define Douala area coordinates mapping
+// ========== CORRECTED COORDINATES FOR DOUALA AREAS ==========
 $area_coordinates = [
-    'Akwa' => ['lat' => 4.0469, 'lng' => 9.7043],
-    'Bonanjo' => ['lat' => 4.0500, 'lng' => 9.7042],
-    'Bonaberi' => ['lat' => 4.0833, 'lng' => 9.6833],
-    'Bonamoussadi' => ['lat' => 4.0833, 'lng' => 9.7167],
-    'New Bell' => ['lat' => 4.0417, 'lng' => 9.6958],
-    'Deido' => ['lat' => 4.0458, 'lng' => 9.6896],
-    'Makepe' => ['lat' => 4.0708, 'lng' => 9.6833],
-    'Tsinga' => ['lat' => 4.0542, 'lng' => 9.7125],
-    'Damas' => ['lat' => 4.0479, 'lng' => 9.7083],
-    'Logbessou' => ['lat' => 4.0972, 'lng' => 9.7167]
+    'Deido' => ['lat' => 4.0458, 'lng' => 9.6896, 'zoom' => 16],
+    'Akwa' => ['lat' => 4.0475, 'lng' => 9.7035, 'zoom' => 16],
+    'Bonanjo' => ['lat' => 4.0505, 'lng' => 9.7030, 'zoom' => 16],
+    'Bonaberi' => ['lat' => 4.0820, 'lng' => 9.6820, 'zoom' => 15],
+    'Bonamoussadi' => ['lat' => 4.0840, 'lng' => 9.7150, 'zoom' => 15],
+    'New Bell' => ['lat' => 4.0410, 'lng' => 9.6960, 'zoom' => 16],
+    'Makepe' => ['lat' => 4.0710, 'lng' => 9.6820, 'zoom' => 15],
+    'Logbessou' => ['lat' => 4.0980, 'lng' => 9.7170, 'zoom' => 15],
+    'Bepanda' => ['lat' => 4.0600, 'lng' => 9.7000, 'zoom' => 16],
+    'Ndogbong' => ['lat' => 4.0900, 'lng' => 9.7100, 'zoom' => 15],
+    'Bali' => ['lat' => 4.0550, 'lng' => 9.6950, 'zoom' => 16],
+    'Bonapriso' => ['lat' => 4.0520, 'lng' => 9.7080, 'zoom' => 16],
+    'Japoma' => ['lat' => 4.1050, 'lng' => 9.7200, 'zoom' => 14]
 ];
 
 // Fetch patient's saved location from database
@@ -35,20 +38,27 @@ $patient_stmt->bind_param("i", $patient_id);
 $patient_stmt->execute();
 $patient_data = $patient_stmt->get_result()->fetch_assoc();
 
-// Set patient location - use area coordinates if available
+// Set patient location
 $patient_city = 'Douala';
-$patient_area = $patient_data['area'] ?? 'Akwa';
+$patient_area = $patient_data['area'] ?? 'Deido';  // Default to Deido if not set
 
-// Get patient coordinates from area
-if (isset($area_coordinates[$patient_area])) {
+// Get patient coordinates
+if (!empty($patient_data['latitude']) && !empty($patient_data['longitude'])) {
+    $patient_lat = floatval($patient_data['latitude']);
+    $patient_lng = floatval($patient_data['longitude']);
+} elseif (isset($area_coordinates[$patient_area])) {
     $patient_lat = $area_coordinates[$patient_area]['lat'];
     $patient_lng = $area_coordinates[$patient_area]['lng'];
 } else {
-    $patient_lat = 4.0500;
-    $patient_lng = 9.7000;
+    // Default to Deido
+    $patient_lat = 4.0458;
+    $patient_lng = 9.6896;
 }
 
-// Fetch ALL approved doctors from database (not just those with coordinates)
+// Get zoom level
+$patient_zoom = $area_coordinates[$patient_area]['zoom'] ?? 15;
+
+// Fetch ALL approved doctors from database
 $doctors_sql = "SELECT id, name, email, phone, specialty, location as city, area, 
                 latitude, longitude, experience, consultation_fee, status 
                 FROM users 
@@ -58,54 +68,43 @@ $doctors = [];
 
 if ($doctors_result && $doctors_result->num_rows > 0) {
     while($doctor = $doctors_result->fetch_assoc()) {
-        // Get coordinates - use doctor's saved coordinates or derive from area
-        $doc_lat = $doctor['latitude'];
-        $doc_lng = $doctor['longitude'];
+        // Get coordinates
+        $doc_lat = null;
+        $doc_lng = null;
         
-        // If doctor has no coordinates but has an area, use area coordinates
-        if (empty($doc_lat) && !empty($doctor['area']) && isset($area_coordinates[$doctor['area']])) {
+        if (!empty($doctor['latitude']) && !empty($doctor['longitude'])) {
+            $doc_lat = floatval($doctor['latitude']);
+            $doc_lng = floatval($doctor['longitude']);
+        } elseif (!empty($doctor['area']) && isset($area_coordinates[$doctor['area']])) {
             $doc_lat = $area_coordinates[$doctor['area']]['lat'];
             $doc_lng = $area_coordinates[$doctor['area']]['lng'];
         }
         
-        // If still no coordinates, skip this doctor (can't show on map)
-        if (empty($doc_lat) || empty($doc_lng)) {
-            continue;
+        if ($doc_lat !== null && $doc_lng !== null) {
+            $doctors[] = [
+                'id' => $doctor['id'],
+                'name' => $doctor['name'],
+                'specialty' => $doctor['specialty'] ?? 'General Practitioner',
+                'city' => 'Douala',
+                'area' => $doctor['area'] ?? 'Unknown',
+                'available' => true,
+                'ratings' => 4.5,
+                'lat' => $doc_lat,
+                'lng' => $doc_lng,
+                'phone' => $doctor['phone'] ?? '',
+                'email' => $doctor['email'],
+                'experience' => $doctor['experience'] ?? '5+ years',
+                'consultation_fee' => $doctor['consultation_fee'] ?? 5000
+            ];
         }
-        
-        $doctors[] = [
-            'id' => $doctor['id'],
-            'name' => $doctor['name'],
-            'specialty' => $doctor['specialty'] ?? 'General Practitioner',
-            'city' => 'Douala',
-            'area' => $doctor['area'] ?? 'Unknown',
-            'available' => true,
-            'ratings' => 4.5,
-            'lat' => floatval($doc_lat),
-            'lng' => floatval($doc_lng),
-            'phone' => $doctor['phone'] ?? '',
-            'email' => $doctor['email'],
-            'experience' => $doctor['experience'] ?? '5+ years',
-            'consultation_fee' => $doctor['consultation_fee'] ?? 5000
-        ];
     }
 }
-
-// If no approved doctors in database, show message
-if (empty($doctors)) {
-    // You can keep default doctors for testing or show empty state
-    $doctors = [];
-}
-
-// Store doctors in session for offline access
-$_SESSION['cached_doctors'] = json_encode($doctors);
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Find Doctor | Patient Dashboard | TeleMed Cameroon</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -173,12 +172,6 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
         .logo h2 {
             font-size: 1.5rem;
             font-weight: 600;
-        }
-
-        .logo p {
-            font-size: 0.8rem;
-            opacity: 0.8;
-            margin-top: 5px;
         }
 
         .nav-links {
@@ -255,17 +248,15 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             color: #1a3a4a;
         }
 
-        .page-header p {
-            color: #6c757d;
-            margin-top: 5px;
-        }
-
         .patient-badge {
             background: linear-gradient(135deg, #2b7a8a, #1a5a6a);
             padding: 10px 20px;
             border-radius: 40px;
             color: white;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .search-section {
@@ -299,6 +290,29 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             border-radius: 10px;
             cursor: pointer;
             font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .search-section button:hover {
+            background: #1f5c6e;
+            transform: translateY(-2px);
+        }
+
+        .location-status {
+            background: #e7f3ff;
+            padding: 12px 18px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.9rem;
+            border-left: 4px solid #2b7a8a;
+        }
+
+        .location-status i {
+            color: #2b7a8a;
+            font-size: 1.1rem;
         }
 
         .map-doctors-layout {
@@ -308,10 +322,10 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
         }
 
         #map {
-            height: 550px;
+            height: 600px;
             border-radius: 16px;
             overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             background: #e9ecef;
         }
 
@@ -319,9 +333,9 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             background: white;
             border-radius: 16px;
             overflow-y: auto;
-            max-height: 550px;
+            max-height: 600px;
             padding: 15px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         .doctor-card {
@@ -331,20 +345,13 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             margin-bottom: 15px;
             transition: all 0.3s;
             border-left: 4px solid #2b7a8a;
+            cursor: pointer;
         }
 
         .doctor-card:hover {
             transform: translateX(5px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .doctor-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-            gap: 10px;
+            background: #fff;
         }
 
         .doctor-name {
@@ -371,32 +378,18 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             font-weight: 500;
         }
 
-        .ratings {
-            color: #f39c12;
-            margin: 5px 0;
-        }
-
         .fee {
             font-weight: 600;
             color: #1a3a4a;
         }
 
-        .badge {
-            display: inline-block;
+        .badge-available {
+            background: #d4edda;
+            color: #155724;
             padding: 4px 10px;
             border-radius: 20px;
             font-size: 0.7rem;
             font-weight: 600;
-        }
-
-        .badge-available {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .badge-unavailable {
-            background: #f8d7da;
-            color: #721c24;
         }
 
         .btn-book {
@@ -409,10 +402,12 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             cursor: pointer;
             margin-top: 10px;
             font-weight: 500;
+            transition: all 0.3s;
         }
 
         .btn-book:hover {
             background: #1f5c6e;
+            transform: translateY(-2px);
         }
 
         .empty-state {
@@ -424,7 +419,21 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
         .empty-state i {
             font-size: 4rem;
             margin-bottom: 15px;
-            color: #dee2e6;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2b7a8a;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 1024px) {
@@ -499,8 +508,13 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
                 </div>
                 <div class="patient-badge">
                     <i class="fas fa-user"></i> <?php echo htmlspecialchars($patient_name); ?>
-                    <!-- <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($patient_area); ?>, Douala -->
+                    <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($patient_area); ?>
                 </div>
+            </div>
+
+            <div class="location-status" id="locationStatus">
+                <i class="fas fa-location-dot"></i>
+                <span id="locationStatusText">📍 You are in <strong><?php echo htmlspecialchars($patient_area); ?></strong>, Douala</span>
             </div>
 
             <div class="search-section">
@@ -517,22 +531,24 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
                 </select>
                 <select id="areaFilter">
                     <option value="all">All Areas</option>
+                    <option value="Deido">Deido</option>
                     <option value="Akwa">Akwa</option>
                     <option value="Bonanjo">Bonanjo</option>
                     <option value="Bonaberi">Bonaberi</option>
                     <option value="Bonamoussadi">Bonamoussadi</option>
                     <option value="New Bell">New Bell</option>
-                    <option value="Deido">Deido</option>
                     <option value="Makepe">Makepe</option>
                     <option value="Logbessou">Logbessou</option>
                 </select>
                 <select id="distanceFilter">
+                    <option value="2">Within 2 km</option>
                     <option value="5">Within 5 km</option>
                     <option value="10" selected>Within 10 km</option>
                     <option value="20">Within 20 km</option>
                     <option value="all">All distances</option>
                 </select>
                 <button onclick="filterDoctors()"><i class="fas fa-search"></i> Search</button>
+                <button onclick="updateLiveLocation()" style="background: #28a745;"><i class="fas fa-location-dot"></i> Update My Location</button>
             </div>
 
             <div class="map-doctors-layout">
@@ -545,10 +561,8 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
                             <p>There are no approved doctors in the system yet. Please check back later.</p>
                         </div>
                     <?php else: ?>
-                        <div class="loading-spinner">
-                            <div class="spinner"></div>
-                            <p>Loading doctors near you in Douala...</p>
-                        </div>
+                        <div class="spinner"></div>
+                        <p style="text-align: center;">Loading doctors near you...</p>
                     <?php endif; ?>
                 </div>
             </div>
@@ -557,48 +571,144 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Patient location
+        // ========== CORRECTED COORDINATES ==========
+        // Patient location - using correct Deido coordinates
         let patientLat = <?php echo $patient_lat; ?>;
         let patientLng = <?php echo $patient_lng; ?>;
         let patientArea = '<?php echo htmlspecialchars($patient_area); ?>';
+        let patientZoom = <?php echo $patient_zoom; ?>;
+        
         let map = null;
         let markers = [];
+        let userMarker = null;
         
         // Doctor data
         const doctorsData = <?php echo json_encode($doctors); ?>;
-        let currentDoctors = [];
+        let currentDoctors = doctorsData;
         let currentMarkers = [];
         
-        // Area coordinates
+        // ========== CORRECTED AREA COORDINATES ==========
         const areaCoordinates = {
-            'Akwa': { lat: 4.0469, lng: 9.7043 },
-            'Bonanjo': { lat: 4.0500, lng: 9.7042 },
-            'Bonaberi': { lat: 4.0833, lng: 9.6833 },
-            'Bonamoussadi': { lat: 4.0833, lng: 9.7167 },
-            'New Bell': { lat: 4.0417, lng: 9.6958 },
-            'Deido': { lat: 4.0458, lng: 9.6896 },
-            'Makepe': { lat: 4.0708, lng: 9.6833 },
-            'Logbessou': { lat: 4.0972, lng: 9.7167 }
+            'Deido': { lat: 4.0458, lng: 9.6896, zoom: 16 },
+            'Akwa': { lat: 4.0475, lng: 9.7035, zoom: 16 },
+            'Bonanjo': { lat: 4.0505, lng: 9.7030, zoom: 16 },
+            'Bonaberi': { lat: 4.0820, lng: 9.6820, zoom: 15 },
+            'Bonamoussadi': { lat: 4.0840, lng: 9.7150, zoom: 15 },
+            'New Bell': { lat: 4.0410, lng: 9.6960, zoom: 16 },
+            'Makepe': { lat: 4.0710, lng: 9.6820, zoom: 15 },
+            'Logbessou': { lat: 4.0980, lng: 9.7170, zoom: 15 }
         };
         
+        // Custom markers
+        const patientIcon = L.divIcon({
+            html: '<div style="background-color: #2b7a8a; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>',
+            iconSize: [24, 24],
+            className: 'patient-marker'
+        });
+        
+        const doctorIcon = L.divIcon({
+            html: '<div style="background-color: #e74c3c; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>',
+            iconSize: [22, 22],
+            className: 'doctor-marker'
+        });
+        
+        // Update live location
+        function updateLiveLocation() {
+            const statusSpan = document.getElementById('locationStatusText');
+            statusSpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Getting your location...';
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        patientLat = position.coords.latitude;
+                        patientLng = position.coords.longitude;
+                        
+                        // Update map
+                        map.setView([patientLat, patientLng], 16);
+                        
+                        if (userMarker) {
+                            map.removeLayer(userMarker);
+                        }
+                        userMarker = L.marker([patientLat, patientLng], { icon: patientIcon })
+                            .addTo(map)
+                            .bindPopup('<strong>Your Current Location</strong>')
+                            .openPopup();
+                        
+                        // Try to get area name from coordinates
+                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${patientLat}&lon=${patientLng}&zoom=18&addressdetails=1`)
+                            .then(response => response.json())
+                            .then(data => {
+                                let areaName = patientArea;
+                                if (data.address && data.address.suburb) {
+                                    areaName = data.address.suburb;
+                                } else if (data.address && data.address.neighbourhood) {
+                                    areaName = data.address.neighbourhood;
+                                }
+                                statusSpan.innerHTML = `📍 You are in <strong>${areaName}</strong>, Douala`;
+                                document.querySelector('.patient-badge').innerHTML = `<i class="fas fa-user"></i> <?php echo $patient_name; ?> <i class="fas fa-map-marker-alt"></i> ${areaName}`;
+                            })
+                            .catch(() => {
+                                statusSpan.innerHTML = `📍 Your location has been updated!`;
+                            });
+                        
+                        // Refresh doctors list
+                        displayDoctors(currentDoctors);
+                        
+                        setTimeout(() => {
+                            if (statusSpan.innerHTML.includes('updated')) {
+                                statusSpan.innerHTML = `📍 You are in <strong>${patientArea}</strong>, Douala`;
+                            }
+                        }, 3000);
+                    },
+                    function(error) {
+                        console.error('Geolocation error:', error);
+                        let errorMsg = 'Unable to get your location. ';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMsg += 'Please allow location access in your browser.';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMsg += 'Location information unavailable.';
+                                break;
+                            case error.TIMEOUT:
+                                errorMsg += 'Location request timed out.';
+                                break;
+                        }
+                        statusSpan.innerHTML = `⚠️ ${errorMsg} Using default location (${patientArea}).`;
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            } else {
+                statusSpan.innerHTML = '⚠️ Geolocation not supported by your browser.';
+            }
+        }
+        
+        // Initialize map
         function initMap() {
             if (map) map.remove();
             
-            map = L.map('map').setView([patientLat, patientLng], 14);
+            map = L.map('map').setView([patientLat, patientLng], patientZoom);
             
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
+            // Better tile layer with street names
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19,
+                minZoom: 10
             }).addTo(map);
             
-            // Patient marker
-            L.marker([patientLat, patientLng], {
-                icon: L.divIcon({
-                    html: '<div style="background-color: #2b7a8a; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white;"></div>',
-                    iconSize: [20, 20]
-                })
-            }).addTo(map).bindPopup('<strong>Your Location</strong><br>' + patientArea + ', Douala').openPopup();
+            // Add controls
+            L.control.zoom({ position: 'topright' }).addTo(map);
+            L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(map);
+            
+            // Add user marker
+            userMarker = L.marker([patientLat, patientLng], { icon: patientIcon })
+                .addTo(map)
+                .bindPopup('<strong>Your Location</strong><br>' + patientArea + ', Douala')
+                .openPopup();
         }
         
+        // Calculate distance
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371;
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -610,6 +720,7 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             return R * c;
         }
         
+        // Display doctors
         function displayDoctors(doctors) {
             const container = document.getElementById('doctorsContainer');
             const distanceLimit = document.getElementById('distanceFilter').value;
@@ -617,11 +728,13 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             const areaFilter = document.getElementById('areaFilter').value;
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             
+            // Clear existing markers
             if (currentMarkers.length) {
-                currentMarkers.forEach(m => map.removeLayer(m));
+                currentMarkers.forEach(marker => map.removeLayer(marker));
                 currentMarkers = [];
             }
             
+            // Filter doctors
             let filtered = doctors.filter(doc => {
                 if (!doc.lat || !doc.lng) return false;
                 const distance = calculateDistance(patientLat, patientLng, doc.lat, doc.lng);
@@ -637,41 +750,58 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             filtered.sort((a, b) => a.distance - b.distance);
             
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="empty-state"><i class="fas fa-user-md"></i><h3>No Doctors Found</h3><p>Try adjusting your filters.</p><p>📍 You are in: ${patientArea}, Douala</p></div>`;
+                container.innerHTML = `<div class="empty-state">
+                    <i class="fas fa-user-md"></i>
+                    <h3>No Doctors Found</h3>
+                    <p>Try adjusting your filters or search criteria.</p>
+                    <p style="margin-top: 10px;">📍 You are in: ${patientArea}, Douala</p>
+                    <button onclick="updateLiveLocation()" style="margin-top: 15px; padding: 8px 20px; background: #2b7a8a; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                        <i class="fas fa-location-dot"></i> Update My Location
+                    </button>
+                </div>`;
                 return;
             }
             
             container.innerHTML = filtered.map(doc => `
-                <div class="doctor-card">
-                    <div class="doctor-header">
-                        <div>
-                            <div class="doctor-name">${escapeHtml(doc.name)}</div>
-                            <div class="specialty"><i class="fas fa-stethoscope"></i> ${escapeHtml(doc.specialty)}</div>
-                            <div class="location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(doc.area)}, Douala</div>
-                            <div class="distance"><i class="fas fa-location-dot"></i> ${doc.distance.toFixed(1)} km away</div>
-                            <div class="ratings"><i class="fas fa-star"></i> ${doc.ratings} / 5.0</div>
-                            <div class="fee"><i class="fas fa-money-bill-wave"></i> ${doc.consultation_fee.toLocaleString()} FCFA</div>
-                        </div>
-                        <span class="badge badge-available">✅ Available</span>
-                    </div>
-                    <button class="btn-book" onclick="bookDoctor(${doc.id})">
+                <div class="doctor-card" onclick="focusOnDoctor(${doc.lat}, ${doc.lng})">
+                    <div class="doctor-name">${escapeHtml(doc.name)}</div>
+                    <div class="specialty"><i class="fas fa-stethoscope"></i> ${escapeHtml(doc.specialty)}</div>
+                    <div class="location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(doc.area)}, Douala</div>
+                    <div class="distance"><i class="fas fa-location-dot"></i> ${doc.distance.toFixed(1)} km away</div>
+                    <div class="fee"><i class="fas fa-money-bill-wave"></i> ${doc.consultation_fee.toLocaleString()} FCFA</div>
+                    <span class="badge-available">✅ Available</span>
+                    <button class="btn-book" onclick="event.stopPropagation(); bookDoctor(${doc.id})">
                         <i class="fas fa-calendar-plus"></i> Book Appointment
                     </button>
                 </div>
             `).join('');
             
+            // Add doctor markers
             filtered.forEach(doc => {
-                const marker = L.marker([doc.lat, doc.lng])
-                    .bindPopup(`<strong>${escapeHtml(doc.name)}</strong><br>${escapeHtml(doc.specialty)}<br>📍 ${escapeHtml(doc.area)}<br>📏 ${doc.distance.toFixed(1)} km away`)
+                const marker = L.marker([doc.lat, doc.lng], { icon: doctorIcon })
+                    .bindPopup(`
+                        <strong>${escapeHtml(doc.name)}</strong><br>
+                        ${escapeHtml(doc.specialty)}<br>
+                        📍 ${escapeHtml(doc.area)}, Douala<br>
+                        📏 ${doc.distance.toFixed(1)} km away<br>
+                        <button onclick="bookDoctor(${doc.id})" style="margin-top: 5px; padding: 5px 10px; background: #2b7a8a; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            Book Appointment
+                        </button>
+                    `)
                     .addTo(map);
                 currentMarkers.push(marker);
             });
             
+            // Fit bounds
             if (filtered.length > 0) {
                 const bounds = L.latLngBounds([[patientLat, patientLng]]);
                 filtered.forEach(d => bounds.extend([d.lat, d.lng]));
                 map.fitBounds(bounds, { padding: [50, 50] });
             }
+        }
+        
+        function focusOnDoctor(lat, lng) {
+            map.setView([lat, lng], 17);
         }
         
         function filterDoctors() {
@@ -704,8 +834,8 @@ $_SESSION['cached_doctors'] = json_encode($doctors);
             if(confirm('Logout?')) window.location.href = '../index.php';
         }
         
+        // Initialize
         window.onload = function() {
-            currentDoctors = doctorsData;
             initMap();
             displayDoctors(currentDoctors);
             

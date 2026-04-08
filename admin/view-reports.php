@@ -798,11 +798,65 @@ for ($i = 5; $i >= 0; $i--) {
             </div>
 
             <!-- Export Section -->
-            <div class="export-section">
+            <!-- <div class="export-section">
                 <button class="btn-export" onclick="exportReport()">
                     <i class="fas fa-download"></i> Export Report as CSV
                 </button>
+            </div> -->
+
+            <!-- Export Report Button -->
+            <div class="export-section" style="margin-bottom: 20px; text-align: right;">
+                <button onclick="exportReport()" class="btn-export">
+                    <i class="fas fa-download"></i> Export Report as CSV
+                </button>
+                <button onclick="exportReportPDF()" class="btn-export-pdf" style="background: #dc3545; margin-left: 10px;">
+                    <i class="fas fa-file-pdf"></i> Export Report as PDF
+                </button>
             </div>
+
+            <style>
+            .btn-export {
+                background: #28a745;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: 500;
+                transition: all 0.3s;
+            }
+
+            .btn-export:hover {
+                background: #218838;
+                transform: translateY(-2px);
+            }
+
+            .btn-export-pdf {
+                background: #dc3545;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: 500;
+                transition: all 0.3s;
+            }
+
+            .btn-export-pdf:hover {
+                background: #c82333;
+                transform: translateY(-2px);
+            }
+            </style>
+
+            <script>
+            function exportReport() {
+                window.location.href = 'export-report.php?format=csv';
+            }
+
+            function exportReportPDF() {
+                window.location.href = 'export-report.php?format=pdf';
+            }
+            </script>
 
         </div>
 

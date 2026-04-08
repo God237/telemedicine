@@ -667,7 +667,7 @@ function safeHtml($value, $default = 'Not provided') {
 
             <div class="page-header">
                 <div class="welcome">
-                    <h1>Welcome, Dr. <?php echo htmlspecialchars($doctor_name); ?> 👋</h1>
+                    <h1>Welcome, Dr. <?php echo htmlspecialchars($doctor_name); ?></h1>
                     <p>Here's what's happening with your practice today</p>
                 </div>
                 <div class="doctor-badge">
